@@ -2,6 +2,17 @@
 
 Sep 26, 2026 · @Marius A.
 
+## 0. How to read these documents
+
+This specification is one of four binding documents in `plans/`. When they disagree, the first in this list wins:
+
+1. `Specification.md` (this file) — behaviour, architecture, stack, dependencies.
+2. [File-format-contract.md](File-format-contract.md) — everything written to disk.
+3. [THEMES.md](THEMES.md) — every colour, font, size, margin and spacing value.
+4. [Working-plan.md](Working-plan.md) — task order, scope per task, files, steps, acceptance (with `TASKS.csv` generated from it).
+
+The mockups in `ui/` show layout and wording; they rank below all four. Section numbers in this file are cited by the Working plan and must not be renumbered.
+
 ## 1. Overview
 
 Frisket is a desktop publisher that lets scientists produce print-ready posters, flyers, booklets, handouts and certificates without design training. It is a new app: built on Tauri 2 with a Rust core, a Svelte 5 interface and the Typst typesetting engine as its layout and PDF engine. It targets macOS first (Apple Silicon, macOS 14+), keeps the code portable, and adds Windows and Linux after 1.0. The UI is English only.
@@ -144,7 +155,7 @@ v1 keeps the full scope of 14 feature areas, F1–F14. Each bullet names the mec
 
 - Typst paragraph layout: OpenType features, ligatures, small caps, old-style or lining figures, variable fonts.
 - Paragraph and character styles; theme-bound by default, overridable per style.
-- Stories flow across the columns of a block and across pages in Document Flow (booklets); overset indicator and overflow warnings. Threading between arbitrary Free frames is decided by spike T0.7.
+- Stories flow across the columns of a block and across pages in Document Flow (booklets); overset indicator and overflow warnings. Threading between arbitrary Free frames is decided by spike T0.11 (Spike D).
 - Hyphenation and justification from Typst for its supported languages; keep-with-next, widow/orphan control.
 - Spell check in the editor overlay via the webview (system dictionaries; any language installed on the system, set per document or per style).
 - Find and replace across the document, including styles.
@@ -153,7 +164,7 @@ v1 keeps the full scope of 14 feature areas, F1–F14. Each bullet names the mec
 
 ### F5. Themes and brand kits
 
-- Theme = palette (primary, accent, surface, text, muted), type pairing, type scale, spacing scale, figure palette.
+- Theme = palette (primary, onPrimary, accent, surface, tint, text, muted, rule), type pairing, type scale, spacing scale, figure palette. Six built-in themes (Clinical navy, Forest, Plum, Graphite, Coral, Ocean), four type pairings and every value are defined in [THEMES.md](THEMES.md).
 - Type scale derives from document kind and viewing distance.
 - Colour-blind-safe figure palettes (Okabe–Ito, viridis family) with preview.
 - Five bundled font families, chosen to be metric-compatible with the fonts most Word and PowerPoint files arrive in, so imports keep their line breaks and documents lay out identically on every machine:
@@ -441,7 +452,7 @@ All output comes from the same Typst compile the canvas shows, so the PDF matche
 
 - Each check is a `PreflightRule` with id, severity (issue / suggestion), scope, a detector over the model plus layout map, and an optional fix returning `Command`s (fixes undo like any edit).
 - Rules run after each relayout (debounced 250 ms) and feed the toolbar badge; the Preflight screen runs them all.
-- Minimum text size is a function of viewing distance with a rule table per document kind; defaults need calibration (open question).
+- Minimum text size is a function of viewing distance with a rule table per document kind; the rule and its table are in THEMES §3 (calibrated so that 1.5 m → 28 pt body).
 - Distance preview: the page PNG is scaled to the visual angle of the chosen distance and blurred to typical acuity (CSS transform + filter in the webview).
 - Colour-vision simulation: published CVD matrices applied in Rust to the page PNG (Machado et al. 2009 matrices).
 - Effective resolution = pixel size ÷ placed size; 150 ppi warn, 100 ppi issue for print.
@@ -510,7 +521,7 @@ v1 is built in 11 phases, P0–P10; each ends in a runnable build on Gitea. A us
 
 | Phase | Delivers | Exit criterion | Size |
 | --- | --- | --- | --- |
-| P0 Foundations and spikes | Repo, workspace, single-window tabbed Tauri shell, CI, 7 spikes | Blank A0 page renders from Typst in a document tab; CI green | M |
+| P0 Foundations and spikes | Repo, workspace, single-window tabbed Tauri shell, CI, 6 spikes (A–F) | Blank A0 page renders from Typst in a document tab; CI green | M |
 | P1 Model, format and canvas | Model, commands, undo, `.frisket` format 1.0, compat corpus, Free-mode canvas | Draw, move, undo, save, reopen identical; format 1.0 frozen | L |
 | P2 Text and styles | Stories, overlay editor, styles, overset, spell check | Type a styled multi-column section; overset flagged | L |
 | P3 Structure and themes | Flow solver, outline, block types, themes, templates, Home board | Poster created from the Home board, re-themed live | L |
@@ -543,6 +554,9 @@ The repository lives on the internal Gitea server (`git.twin-gray.ts.net`). Most
 ```text
 frisket/
   Cargo.toml            workspace, pinned versions
+  CLAUDE.md             entry point for implementing agents
+  plans/                Specification, File-format-contract, THEMES, Working-plan, TASKS.csv
+  ui/                   mockups 01–12
   crates/               frisket-model, -format, -flow, -typeset, -render, -import, -features, -cli
   app/
     src/                Svelte 5 UI
@@ -551,7 +565,9 @@ frisket/
     compat/             one folder per released format version — never edited, never deleted
     figures/ import/ bib/ merge/ reference/ snapshots/
   schema/               frisket-1.0.schema.json, frisket-1.1.schema.json, ...
-  fonts/                bundled OFL fonts
+  fonts/                bundled fonts with licence files (THEMES §2)
+  resources/            themes, rules, templates, CSL styles, icons, presets, samples
+  spikes/               P0 spike programs, never imported by the app
   xtask/                repo automation (schema-check, bindings, fixtures)
   docs/                 adr/, format/, smoke.md
   .gitea/workflows/
@@ -578,7 +594,7 @@ Secrets: the updater private key (`TAURI_SIGNING_PRIVATE_KEY` and its password) 
 
 - `tauri.conf.json` → `bundle.macOS.signingIdentity: "-"` produces an ad-hoc signed `.app`; no Apple developer account needed.
 - First launch is blocked by Gatekeeper; the user allows it in System Settings → Privacy & Security → Open Anyway. The README documents this with screenshots.
-- The updater verifies each update with its minisign signature; the endpoint is the `latest.json` on the Gitea release while internal; the public channel is chosen with the licence decision. Whether updated builds need re-approval in Gatekeeper is checked in T10.8.
+- The updater verifies each update with its minisign signature; the endpoint is the `latest.json` on the Gitea release while internal; the public channel is chosen with the licence decision. Whether updated builds need re-approval in Gatekeeper is checked in T10.7.
 - Adding notarization later = Developer ID certificate + `APPLE_*` secrets in the release job. Nothing in the architecture blocks it.
 
 ### Later platforms
@@ -594,13 +610,13 @@ The largest risk is still scope; the second is in-place text editing. The phase 
 | Risk | Impact | Mitigation |
 | --- | --- | --- |
 | Scope too large for v1 | Release slips | Ship 0.1 after P6; P8–P10 features can move to 1.x without breaking the format |
-| Overlay editor feels different from final render | Users distrust WYSIWYG | Spike T0.6; theme fonts loaded in the webview; re-render within 150 ms; fallback: edit in the inspector with live canvas |
+| Overlay editor feels different from final render | Users distrust WYSIWYG | Spike C (T0.10); theme fonts loaded in the webview; re-render within 150 ms; fallback: edit in the inspector with live canvas |
 | Typst API churn between versions | Upgrade work, layout drift | Pin exact version; upgrade only in a dedicated task with snapshot review; files never store Typst code |
 | Flow solver edge cases | Layout jumps | Golden tests from day one; deterministic ordering; Free mode as escape hatch |
-| Free-frame threading not expressible in Typst | Booklet/flyer limitation | Spike T0.7; fallback "continued" frames that split at paragraph boundaries |
-| Large posters slow as SVG in the webview | Laggy canvas | PNG tiles above 200% zoom; spike T0.5 measures |
+| Free-frame threading not expressible in Typst | Booklet/flyer limitation | Spike D (T0.11); fallback "continued" frames that split at paragraph boundaries |
+| Large posters slow as SVG in the webview | Laggy canvas | PNG tiles above 200% zoom; Spike B (T0.9) measures |
 | Format change breaks old files | Lost trust, lost work | File format contract, compat corpus in CI, backups on upgrade |
-| Hyphenation missing for a document language (e.g. Romanian content) | Ragged text in that language | Verify supported languages in T0.4; fallback to no hyphenation with ragged-right default |
+| Hyphenation missing for a document language (e.g. Romanian content) | Ragged text in that language | Verify supported languages in Spike A (T0.8); fallback to no hyphenation with ragged-right default |
 | Licence undecided | A copyleft dependency would close the commercial path | Permissive-only `cargo deny` allowlist from P0; decision recorded as an ADR before 0.5 |
 | Paid app without notarization | Gatekeeper warnings deter paying customers | If commercial: Developer ID + notarization before 1.0 (release job already prepared for `APPLE_*` secrets) |
 | Unnotarized builds deter users | Low adoption | Clear install docs; revisit notarization before 1.0 publicity |
@@ -608,7 +624,7 @@ The largest risk is still scope; the second is in-place text editing. The phase 
 ### Open questions
 
 - [ ] Licence model: paid closed-source or open source (GPL-3.0-or-later)? Decide before 0.5; until then the permissive-only rule in section 1 applies.
-- [ ] Minimum text sizes per viewing distance: which published guidance calibrates the rule table?
+- [ ] Minimum text sizes: confirm THEMES §3 (1.5 m → 28 pt) with a printed A0 test before 1.0 and record it in an ADR.
 - [ ] Which three conference poster presets to ship first?
 - [ ] Icon library scope: how many icons to bundle versus download on demand? Only icons whose licence allows use in a closed app (CC0, CC BY) are eligible.
 

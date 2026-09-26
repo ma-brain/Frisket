@@ -1,0 +1,131 @@
+id,phase,phase_title,title,depends_on,spec_refs
+T0.1,P0,Foundations and spikes,Repository skeleton,none,§11
+T0.2,P0,Foundations and spikes,Cargo workspace and crates,T0.1,§6 Crates and folders
+T0.3,P0,Foundations and spikes,Tauri app shell with one window and tabs,T0.2,"§5 (window, tab strip), F14"
+T0.4,P0,Foundations and spikes,Typed IPC bindings,T0.3,§6 IPC contract
+T0.5,P0,Foundations and spikes,"Make targets, linting and CI",T0.4,§11 CI on Gitea Actions
+T0.6,P0,Foundations and spikes,Bundled fonts and the Typst World,T0.2,"F5 fonts, §6 Typst integration"
+T0.7,P0,Foundations and spikes,Walking skeleton: a Typst page in a document tab,T0.4; T0.6,"§5 Canvas composition, §6 Layout pipeline"
+T0.8,P0,Foundations and spikes,"Spike A — Layout map, block measurement and hyphenation",T0.7,"§6 Layout pipeline, §12 Risks"
+T0.9,P0,Foundations and spikes,Spike B — Canvas rendering performance,T0.7,
+T0.10,P0,Foundations and spikes,Spike C — Overlay text editor,T0.7,
+T0.11,P0,Foundations and spikes,Spike D — Story threading across frames,T0.8,"F4, §12 Risks"
+T0.12,P0,Foundations and spikes,"Spike E — Figures, math and citations in Typst",T0.7,
+T0.13,P0,Foundations and spikes,Spike F — Flow solver prototype,T0.2,F2
+T1.1,P1,"Model, format and canvas",Geometry and units,T0.2,§7 (points as `f64`)
+T1.2,P1,"Model, format and canvas",Command system and history,T1.1,§6 Key technical decisions (model and undo)
+T1.3,P1,"Model, format and canvas",Core document model,T1.2,"§7 Entities, §3 Document kinds"
+T1.4,P1,"Model, format and canvas",File format 1.0: read and write,T1.3,"File-format-contract §2, §3, §7"
+T1.5,P1,"Model, format and canvas","Version handling, backups and unreadable files",T1.4,File-format-contract §4–§6
+T1.6,P1,"Model, format and canvas","Sessions, registry and document commands",T1.2; T1.4; T0.4,"§6 IPC contract, Key technical decisions (state ownership, concurrency)"
+T1.7,P1,"Model, format and canvas","Codegen v1, page rendering and layout map",T1.3; T0.8,"§5 Canvas composition, §6 Layout pipeline"
+T1.8,P1,"Model, format and canvas","Document workspace: layout, canvas, zoom and status bar",T1.6; T1.7; T0.9,"§5 Window layout, Canvas navigation"
+T1.9,P1,"Model, format and canvas",Hit testing and selection,T1.8,
+T1.10,P1,"Model, format and canvas","Move, resize, rotate, nudge",T1.9,
+T1.11,P1,"Model, format and canvas","Rulers, guides and display unit",T1.8,
+T1.12,P1,"Model, format and canvas","Snapping, smart guides, align and distribute",T1.10; T1.11,
+T1.13,P1,"Model, format and canvas",Shapes and basic appearance,T1.10,
+T1.14,P1,"Model, format and canvas","Z-order, group, lock",T1.10,
+T1.15,P1,"Model, format and canvas",Clipboard,T1.6; T1.10,
+T1.16,P1,"Model, format and canvas","Autosave, crash recovery and snapshots",T1.6,"F1, §9 (crash recovery target)"
+T1.17,P1,"Model, format and canvas",Compatibility corpus and format 1.0 freeze,T1.5; T1.13; T1.14; T1.11; T1.16,File-format-contract §8
+T2.1,P2,Text and styles,Story model and storage,T1.17,§7 Story and rich text schema
+T2.2,P2,Text and styles,Story codegen and style resolution,T2.1,§6 Typst integration
+T2.3,P2,Text and styles,"Text blocks, measurement and overset",T2.2,F4
+T2.4,P2,Text and styles,Overlay editor: in-place text editing,T2.3; T0.10,"§5 Canvas composition (editor layer), Interaction model"
+T2.5,P2,Text and styles,Character formatting and the font menu,T2.4,"F4, F5 (font menu)"
+T2.6,P2,Text and styles,Paragraph formatting and lists,T2.5,
+T2.7,P2,Text and styles,Paragraph and character styles,T2.6,F4 styles
+T2.8,P2,Text and styles,Threaded frames and overset,T2.3; T0.11,F4
+T2.9,P2,Text and styles,Spell check and find/replace,T2.4,
+T2.10,P2,Text and styles,Scientific characters palette,T2.4,F4
+T3.1,P3,Structure and themes,Grid and Flow placement model,T1.17,"F2, §7 Page"
+T3.2,P3,Structure and themes,Flow solver and the layout pipeline,T3.1; T2.3; T0.13,§6 Layout pipeline
+T3.3,P3,Structure and themes,Flow interaction on the canvas,T3.2; T1.9,§5 Interaction model
+T3.4,P3,Structure and themes,Outline sidebar,T3.1; T1.9,§5 Left sidebar
+T3.5,P3,Structure and themes,Section and header blocks,T3.2; T2.7,F3
+T3.6,P3,Structure and themes,Callout block,T3.5,
+T3.7,P3,Structure and themes,Theme model and token resolution,T2.7,"F5, §7 Theme"
+T3.8,P3,Structure and themes,Built-in themes and the Theme view,T3.7,
+T3.9,P3,Structure and themes,Auto-arrange and column balancing,T3.2,F2
+T3.10,P3,Structure and themes,Free frames on Flow pages,T3.3; T1.10,
+T3.11,P3,Structure and themes,"Document kinds, presets and templates",T3.5; T3.6; T3.8,"§3 Document kinds, F1"
+T3.12,P3,Structure and themes,Home board,T3.11; T0.3,"§3 workflow 1, F1 Home board"
+T3.13,P3,Structure and themes,Reading-order badges,T3.2; T3.5,
+T3.14,P3,Structure and themes,Text fitting,T3.7; T3.2,F4 text fitting
+T4.1,P4,Figures and the R link,Asset model and store,T1.17,"§7 Asset, File-format-contract §2"
+T4.2,P4,Figures and the R link,Figure block with raster images,T4.1; T3.2,"F3 Figure, F6 fit modes"
+T4.3,P4,Figures and the R link,Vector PDF figures,T4.2; T0.12,
+T4.4,P4,Figures and the R link,SVG figures,T4.2; T0.12,
+T4.5,P4,Figures and the R link,Watched folders and live refresh,T4.1,"F6, §6 Linked files"
+T4.6,P4,Figures and the R link,Linked files view and the Assets tab,T4.5,F6 link manager
+T4.7,P4,Figures and the R link,"Captions, numbering and cross-references",T4.2; T2.4,F6
+T4.8,P4,Figures and the R link,Alt text,T4.2,
+T4.9,P4,Figures and the R link,Scientific icon library,T4.1,F6 icon library
+T4.10,P4,Figures and the R link,Brand kits and logo strip,T3.8; T4.1,"F5 brand kit, F3 logo strip"
+T4.11,P4,Figures and the R link,Export theme to R,T3.7,F5
+T4.12,P4,Figures and the R link,Basic photo adjustments,T4.2,F6 photo tools
+T4.13,P4,Figures and the R link,Automatic relink of moved files,T4.6,F6 automatic relink
+T5.1,P5,Scientific content,Table model and layout,T3.2; T2.3,F3 Table
+T5.2,P5,Scientific content,Table editing,T5.1; T2.4,
+T5.3,P5,Scientific content,Table import and paste,T5.1,"F3, §8 Import mapping"
+T5.4,P5,Scientific content,Equations,T0.12; T2.4,F3 Equation
+T5.5,P5,Scientific content,Bibliography import,T1.17,F7
+T5.6,P5,Scientific content,Citation rendering,T5.5; T0.12,F7
+T5.7,P5,Scientific content,Citing and the References view,T5.6; T2.4,
+T5.8,P5,Scientific content,QR codes,T3.2,F3 QR
+T5.9,P5,Scientific content,Connectors,T1.13,
+T5.10,P5,Scientific content,CONSORT / PRISMA builder,T5.9; T3.5,F3 Flowchart
+T5.11,P5,Scientific content,Reference poster reproduction,T5.1; T5.2; T5.3; T5.4; T5.5; T5.6; T5.7; T5.8; T5.9; T5.10; T4.1; T4.2; T4.3; T4.4; T4.5; T4.6; T4.7; T4.8; T4.9; T4.10; T4.11; T4.12; T4.13,
+T6.1,P6,Export and CLI,Export pipeline,T1.7,§8 Export implementation
+T6.2,P6,Export and CLI,Print PDF,T6.1,"F9, §8"
+T6.3,P6,Export and CLI,Screen PDF,T6.2,
+T6.4,P6,Export and CLI,PNG and JPEG,T6.1,
+T6.5,P6,Export and CLI,A4 handout,T6.2,F9
+T6.6,P6,Export and CLI,Export sheet,T6.2; T6.3; T6.4; T6.5,
+T6.7,P6,Export and CLI,Print,T6.2,
+T6.8,P6,Export and CLI,Preview images for recents,T1.4,File-format-contract §2 (`preview.png`)
+T6.9,P6,Export and CLI,Command-line tool,T6.2; T6.3; T6.4,F13
+T6.10,P6,Export and CLI,"Tag 0.1 ""Poster alpha""",T6.1; T6.2; T6.3; T6.4; T6.5; T6.6; T6.7; T6.8; T6.9,
+T7.1,P7,Preflight,Rule engine,T3.2,§8 Preflight engine
+T7.2,P7,Preflight,Layout rules,T7.1,
+T7.3,P7,Preflight,Typography rules,T7.1; T3.7,
+T7.4,P7,Preflight,Image and link rules,T7.1; T4.5,
+T7.5,P7,Preflight,Colour rules,T7.1,
+T7.6,P7,Preflight,Structure rules,T7.1; T4.7; T5.7; T4.9,
+T7.7,P7,Preflight,Fixes,T7.2; T7.3; T7.4; T7.5; T7.6; T3.9; T3.14,
+T7.8,P7,Preflight,Live badge,T7.1,
+T7.9,P7,Preflight,Preflight mode,T7.7; T7.8,
+T7.10,P7,Preflight,Distance preview,T7.9,
+T7.11,P7,Preflight,Colour-vision preview,T7.9; T7.5,
+T7.12,P7,Preflight,Conference presets,T7.1,F8
+T7.13,P7,Preflight,CLI preflight and export gating,T7.1; T6.9; T6.6,
+T8.1,P8,Multi-page and data merge,Pages sidebar,T1.17,§5 Left sidebar
+T8.2,P8,Multi-page and data merge,Facing pages and spreads on the canvas,T8.1,
+T8.3,P8,Multi-page and data merge,Page templates,T8.1; T2.8,"F10, §7 PageTemplate"
+T8.4,P8,Multi-page and data merge,Fields: page numbers and running headers,T8.3,
+T8.5,P8,Multi-page and data merge,Story flow across pages (Document Flow),T2.8; T8.3,§6 Layout pipeline (Document Flow)
+T8.6,P8,Multi-page and data merge,Table of contents,T8.4; T2.7,F10
+T8.7,P8,Multi-page and data merge,Data merge,T5.3; T2.4,F10
+T8.8,P8,Multi-page and data merge,Programme sessions from CSV,T8.7; T8.5,
+T8.9,P8,Multi-page and data merge,Merge export,T8.7; T6.2,
+T8.10,P8,Multi-page and data merge,Booklet imposition,T6.2; T8.2,F9
+T9.1,P9,Import,Import framework,T3.5,§8 Import mapping
+T9.2,P9,Import,DOCX importer,T9.1,
+T9.3,P9,Import,Markdown and Quarto importer,T9.1; T5.4,
+T9.4,P9,Import,"""Start from a file"" on the Home board",T9.2; T9.3; T3.12,
+T9.5,P9,Import,Rich clipboard paste,T9.1; T5.3,
+T9.6,P9,Import,PPTX poster importer,T9.1; T1.13; T5.1,F11
+T9.7,P9,Import,Convert to structured layout,T9.6; T3.9,
+T9.8,P9,Import,"Tag 0.5 ""Beta""",T9.1; T9.2; T9.3; T9.4; T9.5; T9.6; T9.7; T8.1; T8.2; T8.3; T8.4; T8.5; T8.6; T8.7; T8.8; T8.9; T8.10,
+T10.1,P10,"Assistant, polish and release",Assistant endpoint and guardrails,T3.5,F12
+T10.2,P10,"Assistant, polish and release","""Make it fit"", alt-text draft, split into sections",T10.1; T7.7,
+T10.3,P10,"Assistant, polish and release",Settings tab,T4.10; T10.1; T6.9,F14 Settings
+T10.4,P10,"Assistant, polish and release",Accessibility pass,T10.3; T7.9; T8.7; T9.4,
+T10.5,P10,"Assistant, polish and release",Command palette and shortcuts,T3.4,§5 Interaction model
+T10.6,P10,"Assistant, polish and release",Onboarding and sample documents,T9.8,
+T10.7,P10,"Assistant, polish and release",Updates,T6.10; T10.3,§11 Distribution without notarization
+T10.8,P10,"Assistant, polish and release",Performance pass,T8.10; T9.7,§9 targets
+T10.9,P10,"Assistant, polish and release",Documentation,T10.8,
+T10.10,P10,"Assistant, polish and release",Apply the licence decision,T10.9,"§1 Licence, §12 Open questions"
+T10.11,P10,"Assistant, polish and release",Release 1.0,T10.1; T10.2; T10.3; T10.4; T10.5; T10.6; T10.7; T10.8; T10.9; T10.10,
