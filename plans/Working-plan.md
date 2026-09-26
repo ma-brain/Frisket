@@ -2,6 +2,8 @@
 
 Task-level breakdown of [Specification.md](Specification.md) §10. Each phase ends in a runnable build on Gitea. P0–P3 are detailed; later phases are listed at deliverable level and get detailed when the previous phase closes. Size: S ≈ 1 unit, M ≈ 2, L ≈ 3–4.
 
+Frisket starts from an empty repository. No code, documents or plans are carried over from the earlier Quion (AppKit) attempt; only the lessons listed in Specification §2 apply.
+
 Each task: **id · deliverable · where · acceptance**.
 
 ## P0 Foundations and spikes (M)
@@ -16,7 +18,7 @@ Exit: blank A0 page renders from Typst in a document tab; CI green on Gitea.
 | T0.1b | Tauri 2 + Svelte 5 + Vite + pnpm app; single window with overlay title bar and a tab strip (Home placeholder, `+`, Settings) | `app/` | `pnpm tauri dev` opens one window with working tabs |
 | T0.1c | specta / tauri-specta bindings; `cargo xtask bindings --check` | `app/src/lib/bindings.ts` | Stale bindings fail CI |
 | T0.1d | Gitea Actions: `core`, `ui`, `app` jobs; `cargo deny` with permissive-only allowlist; `license-checker` | `.gitea/workflows/`, `deny.toml` | All jobs green; adding a GPL crate fails CI |
-| T0.1e | Bundled fonts (Liberation Sans/Serif, Carlito, Caladea, Lora, NCM Math) with licence files; `THIRD_PARTY.md` generation | `fonts/`, `xtask` | Fonts load in the Typst `World`; third-party list generated |
+| T0.1e | Bundled fonts (Liberation Sans/Serif, Carlito, Caladea, Lora, Latin Modern Math) with licence files; `THIRD_PARTY.md` generation | `fonts/`, `xtask` | Fonts load in the Typst `World`; third-party list generated |
 | T0.1f | Mirror to GitHub `ma-brain/frisket` | Gitea push mirror | Pushes to Gitea `main` appear on GitHub |
 
 ### Spikes (each ends with an ADR in `docs/adr/`)

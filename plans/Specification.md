@@ -8,7 +8,7 @@ Frisket is a desktop publisher that lets scientists produce print-ready posters,
 
 **Licence.** Not decided yet: Frisket may ship as a paid, closed-source app or as open source. To keep both paths open, every code dependency must use a permissive licence (MIT, Apache-2.0, BSD, Zlib, ISC, CC0, Unicode) and every bundled font OFL 1.1 or Apache-2.0. No copyleft code (GPL, LGPL, AGPL, MPL) enters the build; the earlier AGPL citation component is gone. Bundled data under attribution licences (CSL styles CC BY-SA, icons CC BY) is allowed because it is data, not linked code, and is credited in the app.
 
-**Name.** A frisket is the hinged frame on a hand press that holds the sheet and masks the margins so only the intended area prints — a fit for an app built around structure, safe margins and preflight. It is short, unused by any known software product, and works as a file extension (`.frisket`).
+**Name.** Frisket (final). A frisket is the hinged frame on a hand press that holds the sheet and masks the margins so only the intended area prints — a fit for an app built around structure, safe margins and preflight. It is short, unused by any known software product, and works as a file extension (`.frisket`).
 
 **Positioning.** Not an InDesign clone. Frisket is structure-first: the user edits sections, figures and a theme, and the layout follows. Free-form frames exist as an escape hatch. Its distinctive promise is a live link to the analysis pipeline: figures exported from R refresh on the poster automatically, and a CLI rebuilds the PDF from a pipeline.
 
@@ -166,7 +166,7 @@ v1 keeps the full scope of 14 feature areas, F1–F14. Each bullet names the mec
   | Caladea | Cambria | Apache-2.0 |
   | Lora | — (headings and posters) | SIL OFL 1.1 |
 
-  Each ships Regular, Italic, Bold and Bold Italic. Equations use New Computer Modern Math (bundled). Defaults for new documents: body Liberation Sans, headings Lora (changeable in Settings › Fonts).
+  Each ships Regular, Italic, Bold and Bold Italic. Equations use Latin Modern Math (bundled; GUST Font License, redistributed unmodified), which matches LaTeX's default look for users coming from R Markdown and Quarto. Defaults for new documents: body Liberation Sans, headings Lora (changeable in Settings › Fonts).
 - System fonts are offered below the built-in ones ("Fonts on this Mac", on by default, can be hidden); a document using one gets a preflight note offering the closest built-in family.
 - Brand kit: institution logos, colours and fonts saved once and applied to any document.
 - Export theme to R: writes a ggplot2 theme and palette file so figures match the document fonts and colours.
@@ -398,7 +398,8 @@ Licences are checked in CI by `cargo deny` (Rust) and `license-checker` (pnpm) a
 | specta, tauri-specta | Typed IPC bindings | MIT |
 | svelte 5, vite | UI | MIT |
 | prosemirror-\* | Rich-text overlay editor | MIT |
-| Bundled fonts (Liberation Sans, Liberation Serif, Carlito, Lora, New Computer Modern Math) | Text, headings, math | SIL OFL 1.1 (NCM Math: GUST Font License) |
+| Bundled fonts (Liberation Sans, Liberation Serif, Carlito, Lora) | Text, headings | SIL OFL 1.1 |
+| Bundled font Latin Modern Math | Equations | GUST Font License (unmodified) |
 | Bundled font Caladea | Text (Cambria-compatible) | Apache-2.0 |
 | CSL styles | Citation styles (data) | CC BY-SA 3.0, attributed |
 | Servier Medical Art, Bioicons | Icon library (data) | CC BY 4.0 and per-icon licences, attributed |
@@ -610,7 +611,6 @@ The largest risk is still scope; the second is in-place text editing. The phase 
 - [ ] Minimum text sizes per viewing distance: which published guidance calibrates the rule table?
 - [ ] Which three conference poster presets to ship first?
 - [ ] Icon library scope: how many icons to bundle versus download on demand? Only icons whose licence allows use in a closed app (CC0, CC BY) are eligible.
-- [ ] Mockup 10 labels the equation font "Latin Modern Math"; the spec uses New Computer Modern Math (bundled with Typst). Update the mockup or switch the font.
 
 ### Deferred to 1.x and later
 
