@@ -1,0 +1,585 @@
+# Frisket — Specification & Implementation Plan
+
+Sep 26, 2026 · @Marius A.
+
+## 1. Overview
+
+Frisket is a desktop publisher that lets scientists produce print-ready posters, flyers, booklets, handouts and certificates without design training. It is a new app: built on Tauri 2 with a Rust core, a Svelte 5 interface and the Typst typesetting engine as its layout and PDF engine. It targets macOS first (Apple Silicon, macOS 14+), keeps the code portable, and adds Windows and Linux after 1.0. Licence: GPL-3.0-or-later.
+
+**Name.** A frisket is the hinged frame on a hand press that holds the sheet and masks the margins so only the intended area prints — a fit for an app built around structure, safe margins and preflight. It is short, unused by any known software product, and works as a file extension (`.frisket`). Alternatives if you prefer another direction: *Galley* (printers' proof tray), *Platen*, or *ClinPress* to match ClinSize, ClinRand and ClinSkimmer.
+
+**Positioning.** Not an InDesign clone. Frisket is structure-first: the user edits sections, figures and a theme, and the layout follows. Free-form frames exist as an escape hatch. Its distinctive promise is a live link to the analysis pipeline: figures exported from R refresh on the poster automatically, and a CLI rebuilds the PDF from a pipeline.
+
+**Guiding principles**
+
+- Structure over pixels: documents are outlines of typed blocks placed on a column grid.
+- Good defaults, no dead ends: kind, size, layout and theme can change later and content re-flows.
+- Explain, then fix: problems are described in plain language with a one-click, undoable fix.
+- Screen equals print: one engine (Typst, driven from Rust) produces the canvas image, the PDF and the CLI output. The webview never lays out document content.
+- Files are forever: a document saved by any released build opens in every later build (File format contract tab).
+- Local and open: one file per document, no account, no telemetry, GPL source.
+- Scientific content is first-class: linked figures, tables, equations, citations and QR codes are native blocks.
+
+**Concept interface.** The mockups live on the [Frisket concept canvas](https://claude.ai/artifact/SjYAeSFnJm2zVPgv6jnpwT): New document, Poster workspace, Preflight, Booklet, plus the screens added for this version (section 5).
+
+## 2. Stack decision and feasibility
+
+Tauri 2 is feasible for this app on one condition: document layout and PDF output happen in Rust, not in the webview. The webview draws the app chrome and interaction overlays only. With that split, the hard parts that stalled the AppKit attempt (text engine, PDF writer, math, citations) come from one mature, Apache-2.0 Rust engine — Typst — instead of being hand-built on TextKit and Core Graphics.
+
+**Why not lay out in the webview.** The webview differs per platform (WKWebView on macOS, WebView2 on Windows, WebKitGTK on Linux), so HTML/CSS layout would not match between machines or between screen and PDF, and webviews offer no control over bleed, crop marks, font embedding or PDF boxes. "Screen equals print" is impossible that way.
+
+**Why Typst as the engine.** Typst is a Rust typesetting system usable as a library. One compile produces laid-out pages that render to SVG (canvas), PNG (previews, PNG export) and PDF (print). It already provides what the spec needs: paragraph layout with hyphenation and justification, OpenType features, tables, native math, figures with numbering and cross-references, bibliographies from BibTeX/BibLaTeX with CSL styles, SVG and (since 0.14) PDF images placed as vectors, tagged PDF and PDF/A, and incremental recompilation. Frisket never stores Typst code: it keeps its own document model and generates Typst input at runtime, so an engine upgrade cannot break saved files.
+
+**Stack at a glance**
+
+| Concern | Choice | Notes |
+| --- | --- | --- |
+| App shell | Tauri 2 | Same as ClinSkimmer; one window per document |
+| UI | Svelte 5 (runes), TypeScript strict, Vite, pnpm | Panels, dialogs, canvas viewer, overlays |
+| Core logic | Rust workspace (`crates/`) | Model, format, layout, render, features — no UI code |
+| Layout, text, math, citations | Typst crates, version pinned per release | Driven through a custom `World` |
+| Canvas image | Typst → SVG per page, PNG tiles at high zoom | Overlays (selection, handles, badges) drawn in HTML/SVG above it |
+| Text editing | ProseMirror overlay editor in the webview | Model updated per keystroke; Typst re-renders behind it |
+| PDF | typst-pdf, then a small post-processor (lopdf) for TrimBox/BleedBox | Bleed and crop marks generated as page content |
+| File format | ZIP container with JSON, versioned by the File format contract | Replaces the macOS-only package directory |
+| Updates | tauri-plugin-updater (signed with minisign) | Works without notarization |
+| CLI | Separate Rust binary sharing the core crates | For R pipelines |
+
+**What changes compared with the old macOS-only design**
+
+| Old mechanism | New mechanism | Consequence |
+| --- | --- | --- |
+| TextKit 1 threaded frames | Typst paragraph layout; stories flow across columns and pages natively | Free-frame to free-frame threading becomes a P0 spike; fallback is "continued" frames |
+| Core Graphics renderer | Typst SVG / PNG / PDF output | Canvas and PDF share one layout by construction |
+| SwiftMath | Typst math; LaTeX input converted with MiTeX | Users may type LaTeX or Typst math |
+| citeproc-js in JavaScriptCore (AGPL) | Typst's built-in bibliography engine (hayagriva) | No AGPL component; CSL styles still supported |
+| NSDocument autosave and versions | Own autosave, crash recovery and snapshot history | Specified in F1 and the File format contract |
+| FSEvents | `notify` crate | Cross-platform watching |
+| NSSpellChecker | Webview spell checking in the editor overlay | Uses the system dictionaries on macOS |
+| Apple Foundation Models | Optional OpenAI-compatible local endpoint (Ollama, LM Studio) | Assistant stays optional and off by default |
+| Sparkle | tauri-plugin-updater | Same EdDSA-style signed updates |
+| Quick Look extension | `preview.png` inside the file; Quick Look plugin deferred | Finder shows a generic icon until then |
+
+**Honest limits.** In-place text editing is the hardest part in any stack; here it is an overlay editor whose text is re-typeset by Typst, so while typing the overlay shows browser-rendered text and Typst's version appears on commit. Typst's crate API is pre-1.0 and changes between releases; the version is pinned and upgraded deliberately with golden-test review. Both are covered by P0 spikes.
+
+## 3. Users and core workflows
+
+The primary user is a researcher who writes and analyses, not a designer. The quality bar: a first-time user produces a printable A0 poster from an abstract and three R figures in under an hour.
+
+| Persona | Typical output | What they need most |
+| --- | --- | --- |
+| Clinical researcher / biostatistician | Conference poster, e-poster | Linked R figures, tables, readable at distance, fast |
+| PhD student | Poster, thesis-day flyer, lay summary | Templates, citations, equations, preflight guidance |
+| Conference or department organiser | Programme booklet, badges, certificates | Multi-page flow, CSV data merge, page templates |
+| Study team (sponsor/CRO) | Recruitment flyer, patient handout | Brand kit (logos, colours), plain-language layouts |
+
+**Document kinds in v1**
+
+| Kind | Pages | Default sizes | Structure preset |
+| --- | --- | --- | --- |
+| Conference poster | 1 | A0/A1 portrait or landscape, 48×36 in, custom | Header, IMRaD sections, Conclusions, References, Contact & QR |
+| E-poster | 1 or a few | 16:9 (1920×1080 px, 3840×2160 px) | Same as poster, screen type scale |
+| Flyer / leaflet | 1–2 | A4, A5, US Letter, DL tri-fold | Headline, hero image, body, call to action, logos |
+| Handout / one-pager | 1–2 | A4, US Letter | Title, summary, key figure, contacts |
+| Programme booklet | 4–64 | A5, A4, B5 | Cover, day dividers, sessions, speakers, sponsors |
+| Certificate / badge | 1 per record | A4 landscape, badge 90×55 mm, 4×3 in | Merge fields from CSV |
+| Blank | any | any | Free frames, no preset |
+
+**Core workflows**
+
+1. New document: choose kind → size → layout → theme → optionally import an abstract (.docx, .md, .qmd).
+2. Fill content: type into sections, drop figures from a watched folder, paste tables, add equations and citations.
+3. Iterate with the analysis: re-run R; linked figures refresh; captions and numbering stay in place.
+4. Preflight: fix overflows, low-resolution images, small text and contrast issues.
+5. Export: print PDF (bleed and crop marks when needed), screen PDF, PNG, A4 handout, or batch via CLI.
+
+## 4. v1 feature specification
+
+v1 keeps the full scope of 14 feature areas, F1–F14. Each bullet names the mechanism in the new stack where it matters. Section 12 lists what is deferred.
+
+### F1. Documents, pages and templates
+
+- Document kinds and structure presets from section 3; kind can change after creation (content re-maps to the new preset).
+- Page sizes: ISO A/B, US sizes, poster sizes, 16:9 screen, custom in mm/in/pt/px.
+- Bleed and slug per document; safe-area margins shown as guides.
+- Facing pages and spreads for booklets.
+- Template gallery: 3 layouts × 6 themes per kind at launch; "Save as template" for user templates (templates are `.frisket` files in the app data folder).
+- Autosave every 30 s and on window blur to the app data folder; crash recovery offered at next launch.
+- Snapshot history: up to 50 snapshots per document kept in app data (not inside the file), browsable and restorable; "Revert to saved".
+
+### F2. Structured layout (the core differentiator)
+
+- Every page has a layout mode: Flow (default) or Free.
+- Flow mode: a column grid (1–6 columns, gutter, margins). Blocks stack top-to-bottom within columns in outline order and can span 1..n columns. Placement is computed by Frisket's own Flow solver in Rust; block heights are measured by Typst at the block's width.
+- Outline sidebar mirrors reading order; drag in the outline or on the canvas to reorder.
+- Auto-arrange: rebalances blocks across columns to minimise empty space and overflow while keeping reading order.
+- Column balancing and vertical justification (distribute spare space between sections).
+- Reading-order indicators: optional numbered badges for readers.
+- Free mode: absolute frames with snapping, smart guides, align and distribute, lock, group, z-order.
+- A Free frame can be placed on a Flow page (callouts, arrows, badges).
+
+### F3. Blocks (content types)
+
+| Block | v1 behaviour |
+| --- | --- |
+| Title / header | Title, authors with affiliation superscripts, affiliations list, logos row |
+| Text section | Heading + rich text; bullets, numbered lists, bold/italic/super/subscript |
+| Figure | Linked or embedded PDF, SVG, PNG, JPEG, TIFF (converted to PNG on import), WebP; caption; auto-numbering; alt text |
+| Table | Native table; import CSV, TSV, XLSX; paste from Excel/Numbers; header rows, zebra, decimal alignment |
+| Equation | LaTeX or Typst math, rendered as vector; display or inline |
+| Callout / key finding | Highlighted box, theme accent |
+| References | Auto-generated bibliography from cited keys |
+| QR code | URL, DOI, email or vCard; vector output |
+| Logo strip | Brand-kit logos, auto-sized to equal visual weight |
+| Shapes and connectors | Rectangle, ellipse, line, arrow, elbow connector |
+| Flowchart (CONSORT/PRISMA) | Guided builder with boxes, counts and arrows |
+| Icon | From the bundled scientific icon library |
+| Merge field | `{{field}}` placeholders for data merge (F10) |
+
+### F4. Text and typography
+
+- Typst paragraph layout: OpenType features, ligatures, small caps, old-style or lining figures, variable fonts.
+- Paragraph and character styles; theme-bound by default, overridable per style.
+- Stories flow across the columns of a block and across pages in Document Flow (booklets); overset indicator and overflow warnings. Threading between arbitrary Free frames is decided by spike T0.7.
+- Hyphenation and justification from Typst for its supported languages; keep-with-next, widow/orphan control.
+- Spell check in the editor overlay via the webview (system dictionaries; English, Romanian and others installed on the system).
+- Find and replace across the document, including styles.
+- Special characters palette for science: Greek, ±, ≤, ≥, µ, °, arrows, superscript numerals.
+- Text fitting: shrink or grow a section's text within limits to fit its box (never below the preflight minimum).
+
+### F5. Themes and brand kits
+
+- Theme = palette (primary, accent, surface, text, muted), type pairing, type scale, spacing scale, figure palette.
+- Type scale derives from document kind and viewing distance.
+- Colour-blind-safe figure palettes (Okabe–Ito, viridis family) with preview.
+- Bundled open-licence fonts (OFL) for every built-in theme, so documents lay out identically on every machine.
+- Brand kit: institution logos, colours and fonts saved once and applied to any document.
+- Export theme to R: writes a ggplot2 theme and palette file so figures match the document fonts and colours.
+
+### F6. Figures, assets and the R link
+
+- Watched folders: link a folder (e.g. `output/figures`); new or changed files update linked figures (`notify` crate, debounced 300 ms).
+- Link manager: status per asset (in sync, modified, missing, low resolution), relink, embed, reveal in Finder.
+- Vector PDF and SVG figures placed natively by Typst, never rasterised.
+- Fit modes: fit width, fill (crop), original size; crop and focal point.
+- Captions with automatic figure and table numbering in reading order; cross-references that update.
+- Icon library: curated subset of Servier Medical Art and Bioicons, searchable, with automatic attribution line.
+- Photo tools: crop, rotate, brightness/contrast (non-destructive, applied by the `image` crate at render time).
+
+### F7. Citations
+
+- Import BibTeX and BibLaTeX natively; CSL-JSON converted on import; optional live link to a Zotero Better BibTeX export file.
+- Cite with a picker by key or title; numeric or author-year.
+- Styles: Vancouver, AMA, APA, Nature built in; user-added `.csl` files.
+- References block regenerates on every change; optional "move references behind QR" for posters.
+
+### F8. Preflight
+
+- Distance preview: simulate reading at 0.5–4 m.
+- Checks: overflow, text below minimum size for the viewing distance, low effective resolution, contrast, missing fonts, missing links, content in the bleed or trim danger zone, empty placeholders, figure and table numbering order.
+- Colour-vision simulation: protanopia, deuteranopia, tritanopia views of the whole document.
+- Conference rule presets: max size, required sections, required logos.
+- Every issue has an explanation, a "Show me" action and, where possible, an undoable fix.
+
+### F9. Export
+
+- PDF for print: embedded and subset fonts, vector content, bleed and crop marks, sRGB output intent; optional PDF/A-2b.
+- PDF for screen: downsampled images, small file size, clickable links and QR targets.
+- PNG and JPEG at chosen DPI; e-poster PNG at exact pixel size.
+- A4 handout: poster scaled onto A4 with legible margins, one click.
+- Booklet imposition: saddle-stitch printer spreads for office printing.
+- Data-merge export: one multi-page PDF or one file per record.
+
+### F10. Multi-page and data merge
+
+- Page templates (master pages): shared headers, footers, page numbers, backgrounds.
+- Automatic page numbers, section markers, running headers.
+- Table of contents generated from heading styles.
+- CSV/XLSX data merge for certificates, badges and programme sessions (one row → one session block).
+
+### F11. Import
+
+- Abstract import: .docx, .md, .qmd; headings map to sections, images to figures, tables to tables.
+- PowerPoint poster import (.pptx): text boxes, images, shapes and tables mapped to Free frames, with a "Convert to structured layout" assistant.
+- Paste rich text (HTML from the clipboard) from Word, Pages and browsers with styles mapped to the theme.
+
+### F12. Assistant (optional)
+
+- Talks to a local OpenAI-compatible endpoint the user configures (Ollama, LM Studio); hidden when none is set. Nothing leaves the machine unless the user points it elsewhere.
+- "Make it fit": proposes shorter versions of a section; accept or reject, never auto-applied.
+- Draft alt text for figures from the caption.
+- Split pasted abstract text into IMRaD sections.
+- Never alters numbers, statistics or citations; changes shown as a diff before acceptance, and a check rejects any proposal whose numbers differ from the source.
+
+### F13. Command-line tool
+
+- `frisket` CLI shipped inside the app bundle (installable to `/usr/local/bin` from Settings): export to PDF/PNG, relink folders, run preflight with a JSON report, merge CSV, upgrade files to the current format.
+- Lets an R pipeline (targets, Makefile, Quarto post-render) rebuild the PDF after figures change.
+
+### F14. App experience
+
+- English and Romanian UI at launch (svelte-i18n style message catalogues).
+- Full keyboard shortcuts, screen-reader labels on every control, light and dark mode for the app chrome.
+- : first-run sample poster with inline tips.
+- In-app updates via tauri-plugin-updater.
+
+## 5. UI specification
+
+The UI is a three-pane document window (outline, canvas, inspector) plus a New Document flow, a Preflight mode and the dialogs below. All chrome is Svelte in the webview; the page image comes from Rust. The window uses Tauri's overlay title bar on macOS so it looks native (traffic lights inset into the toolbar).
+
+### Window layout
+
+| Region | Width | Contents |
+| --- | --- | --- |
+| Toolbar | full, 52 px | Document name and kind; insert tools (Select, Text, Figure, Table, Equation, Shape, QR, Icon); Auto-arrange; Preflight badge; Export |
+| Left sidebar | 260 px, collapsible | Tabs: Structure (outline in reading order), Pages (thumbnails, page templates), Assets (links, watched folders, icons, brand kit) |
+| Canvas | flexible | Pages on a neutral pasteboard; zoom 10–800%; grid, guides, selection handles, overflow markers |
+| Inspector | 300 px, collapsible | Tabs: Block (context-sensitive), Theme, and Text styles when text is selected |
+| Status bar | full, 28 px | Page size, grid, zoom, save state, file format version |
+
+### Canvas composition (webview)
+
+1. Pasteboard `div` with CSS transform for pan and zoom.
+2. One layer per page: the Typst SVG for that page (below 200% zoom), or PNG tiles of 512 px rendered by Rust at the current zoom (at and above 200%, and for pages with heavy raster content).
+3. Overlay layer in page coordinates: block outlines, selection handles, insertion marker, overflow and reading-order badges, guides. Positions come from the layout map (block id → page rectangles in pt) returned with every render.
+4. Editor layer: the ProseMirror overlay, placed over the block being edited, using the theme's fonts and sizes.
+
+### Interaction model
+
+- Plain language first: "1 column / 2 columns / Full", "Fit width", "Make room". Expert controls sit behind "Show details".
+- Insert = drop onto the canvas or the outline; blocks snap into the nearest column slot with a live insertion marker.
+- Drag files from Finder or a watched folder onto a figure placeholder to fill it (Tauri drag-drop events).
+- Double-click enters text editing; Escape leaves it; Tab moves to the next block in reading order.
+- Every inspector change is one undo step; drags and typing coalesce (typing: one step per 1 s pause or word boundary).
+- Context menus mirror inspector actions; command palette (⌘K) lists every action by name.
+
+### Screens
+
+Screens 1–4 are the approved concepts; 5–11 were added in this version. All are on the [Frisket concept canvas](https://claude.ai/artifact/SjYAeSFnJm2zVPgv6jnpwT).
+
+| # | Screen | Purpose | Key elements |
+| --- | --- | --- | --- |
+| 1 | New document | Start from intent | Kind cards, size chips, layout thumbnails, theme picker, abstract import |
+| 2 | Poster workspace | Edit | Outline, canvas, inspector, watched-folder status |
+| 3 | Preflight | Check before export | Distance slider, colour-vision toggle, issue cards with fixes, passed checks |
+| 4 | Booklet | Multi-page editing | Page templates, spreads, story flow across pages, text styles |
+| 5 | Export | Output | Presets (Print PDF, Screen PDF, PNG, A4 handout, Booklet print), bleed and marks, live size estimate, file naming |
+| 6 | Assets and links | Manage linked files | Watched folders, table of assets with status, relink, embed, resolution per placement |
+| 7 | Data merge | Records to pages | CSV/XLSX preview, field mapping, record stepper, output choice |
+| 8 | References | Citations | Library from .bib, search, cited/uncited filter, style picker, live bibliography preview |
+| 9 | Theme and brand kit | Look | Palette, type pairing, viewing distance, figure palette with CVD preview, brand logos, Export theme to R |
+| 10 | Settings | App-wide | Units, default theme and brand kit, watched-folder defaults, assistant endpoint, CLI install, language, updates |
+| 11 | File version dialogs | Compatibility | Open older file (upgrade with backup), open newer file (read-only), crash recovery |
+
+### Visual language
+
+- Chrome follows macOS conventions (system font, 13 px controls, sidebar materials approximated with neutral greys); accent is a fixed blue #0a5fc4 in v1.
+- Document content never uses app chrome styling; the theme alone drives it.
+- Warnings use orange with an icon and text, never colour alone; success uses green with a checkmark.
+
+## 6. Architecture
+
+Frisket is one repository with a Cargo workspace of UI-free core crates, a Tauri app that wraps them, and a CLI that reuses them. The Rust side owns the document; the Svelte side sends commands and draws what Rust returns. Everything except `app/` runs in tests and in the CLI unchanged.
+
+```mermaid
+flowchart TD
+    UI["app/src · Svelte 5 UI"] -->|typed IPC| Shell["app/src-tauri · Tauri commands, sessions"]
+    CLI["frisket-cli"] --> Features
+    Shell --> Features["frisket-features · preflight, merge, watcher, assistant"]
+    Shell --> Import["frisket-import · docx, md, pptx, xlsx, bib"]
+    Features --> Render["frisket-render · SVG, PNG, PDF, imposition"]
+    Render --> Typeset["frisket-typeset · Typst World, codegen, measure"]
+    Typeset --> Flow["frisket-flow · column solver"]
+    Typeset --> Model["frisket-model · document, commands"]
+    Flow --> Model
+    Import --> Model
+    Features --> Format["frisket-format · .frisket container, migrations"]
+    Format --> Model
+```
+
+Arrows point to dependencies. `frisket-model` depends only on serde, uuid and schemars. Only `frisket-typeset` and `frisket-render` depend on Typst crates.
+
+### Crates and folders
+
+| Unit | Responsibility |
+| --- | --- |
+| `crates/frisket-model` | Document types, typed IDs, units, theme tokens, `Command` enum with apply and invert, JSON Schema via schemars |
+| `crates/frisket-format` | Read/write the `.frisket` ZIP, manifest, version checks, migration chain on `serde_json::Value`, unknown-field preservation, atomic save |
+| `crates/frisket-flow` | Pure Flow solver: columns, spans, overflow, auto-arrange, balancing. No Typst dependency |
+| `crates/frisket-typeset` | Typst `World` (bundled + system fonts, asset bytes, vendored packages), model → Typst content generation, block measurement, compile, layout map (block id → rects), incremental caching |
+| `crates/frisket-render` | Page → SVG / PNG tile / PDF; crop marks, bleed, PDF box post-processing, A4 handout, booklet imposition, colour-vision simulation on PNG |
+| `crates/frisket-import` | DOCX, MD/QMD, PPTX, CSV/TSV/XLSX, BibTeX/CSL-JSON, clipboard HTML → model commands |
+| `crates/frisket-features` | Preflight rules, data merge, theme export to R, folder watching, assistant client |
+| `crates/frisket-cli` | `frisket` binary (clap) |
+| `app/src-tauri` | Tauri 2 shell: window per document, sessions, commands, events, menus, updater, dialogs |
+| `app/src` | Svelte 5 UI: panels, canvas viewer and overlays, ProseMirror editor, dialogs, i18n |
+
+### IPC contract
+
+- Types crossing the bridge are Rust structs exported to TypeScript with `specta` + `tauri-specta`; the generated `app/src/lib/bindings.ts` is committed and CI fails if it is stale. Nobody hand-writes a TS type for a Rust struct.
+- Commands (all `async`, all return `Result<T, AppError>`): `doc_new`, `doc_open`, `doc_save`, `doc_save_as`, `doc_close`, `doc_apply(doc, commands, coalesce_key?) → DocDelta`, `doc_undo`, `doc_redo`, `render_page(doc, page, format, zoom, rev) → RenderedPage`, `layout_map(doc, page, rev)`, `preflight_run(doc)`, `export(doc, preset, path)`, `assets_*`, `merge_*`, `settings_get/set`.
+- Events (Rust → UI): `doc-changed {doc, rev, dirty_pages}`, `asset-changed {doc, asset, status}`, `preflight-updated {doc, summary}`, `autosaved {doc, at}`.
+- Every render request carries the model `rev`; the UI discards any result whose `rev` is older than what it already shows.
+- Large binary results (PNG tiles) return as raw bytes through `tauri::ipc::Response`, never base64 in JSON.
+
+### Key technical decisions
+
+- **State ownership:** the Rust session holds the only authoritative document. The UI holds a read model (outline, selection, inspector values) rebuilt from `DocDelta`s. The UI never mutates document data locally except inside the editor overlay while typing.
+- **Model and undo:** immutable structs with stable IDs (UUID v7); edits are `Command` values producing a new document plus an inverse. The undo stack lives in the session, per document.
+- **Layout pipeline:** model → measure each Flow block with Typst at its column width (cached by content hash + width + theme hash) → Flow solver places blocks → page Typst content with absolutely placed blocks → compile → frames + layout map. Booklet pages in Document Flow let Typst paginate the story natively.
+- **Typst integration:** Frisket generates Typst markup text per page from the model (easy to debug: the dev menu shows it) and compiles with a custom `World`. Typst packages are never downloaded at runtime; any needed package is vendored. The Typst version is pinned in `Cargo.toml` with `=` and recorded in each saved file's manifest for diagnostics only.
+- **Fonts:** bundled OFL fonts are always available; system fonts are discovered once at start. A document stores font family names; a missing font triggers a preflight issue and a bundled fallback.
+- **Concurrency:** one session per document behind a `tokio::sync::Mutex`; compile and render run on `spawn_blocking`; renders for stale revs are cancelled.
+- **Linked files:** `notify` watcher per watched folder; asset identity = relative path from the document + SHA-256 of the last seen content.
+- **Security:** Tauri capabilities restrict the webview to the app's commands; file access goes through Rust and dialogs, no `fs` plugin scope for arbitrary paths from the UI.
+
+### Third-party dependencies
+
+Licences are checked in CI by `cargo deny` (Rust) and `license-checker` (pnpm) against an allowlist compatible with GPL-3.0-or-later. Adding anything not in this table needs an ADR.
+
+| Library | Use | Licence |
+| --- | --- | --- |
+| tauri 2, tauri-plugin-updater, -dialog, -opener | App shell | MIT / Apache-2.0 |
+| typst, typst-pdf, typst-svg, typst-render | Layout, math, bibliography, output | Apache-2.0 |
+| mitex | LaTeX math → Typst math | Apache-2.0 |
+| serde, serde\_json, uuid, schemars | Model and schema | MIT / Apache-2.0 |
+| zip | `.frisket`, DOCX, PPTX, XLSX containers | MIT |
+| quick-xml | DOCX, PPTX parsing | MIT |
+| comrak | Markdown / QMD import | BSD-2-Clause |
+| calamine | XLSX / CSV tables | MIT |
+| lopdf | PDF box post-processing and checks | MIT |
+| image | TIFF conversion, photo adjustments, CVD simulation | MIT / Apache-2.0 |
+| qrcode | QR generation (SVG) | MIT / Apache-2.0 |
+| notify | Folder watching | CC0-1.0 / MIT / Apache-2.0 (by version) |
+| clap | CLI | MIT / Apache-2.0 |
+| specta, tauri-specta | Typed IPC bindings | MIT |
+| svelte 5, vite | UI | MIT |
+| prosemirror-\* | Rich-text overlay editor | MIT |
+| Bundled fonts (Source Serif 4, Source Sans 3, IBM Plex, Atkinson Hyperlegible, New Computer Modern Math) | Themes, math | SIL OFL 1.1 |
+| CSL styles | Citation styles (data) | CC BY-SA 3.0, attributed |
+| Servier Medical Art, Bioicons | Icon library (data) | CC BY 4.0 and per-icon licences, attributed |
+
+## 7. Document model
+
+A document is a tree of pages holding blocks in reading order, plus shared stories, styles, a theme and an asset table. Geometry is stored in points (1/72 in) as `f64`; the UI converts to mm, in or px. How this model is written to disk, versioned and migrated is binding and lives in the **File format contract** tab; this section only names the entities.
+
+| Entity | Key fields |
+| --- | --- |
+| Document | id, kind, theme, brandKit (embedded copy), styles, pageTemplates, pages, stories, assets, bibliography, mergeSource, preflightProfile |
+| Page | id, size, bleed, templateRef, layoutMode (flow / documentFlow / free), grid (columns, gutter, margins), blocks |
+| Block | id, type, content (per type), placement (flow: order, span / free: rect, rotation, z), styleOverrides, locked |
+| Story | id, rich text as a ProseMirror-compatible node tree with style refs, citation and cross-reference nodes |
+| Asset | id, kind (linked / embedded), relativePath, absolutePathHint, sha256, pixelSize, mediaType |
+| Theme | palette, typePairing, typeScale, spacingScale, figurePalette, viewingDistance |
+| Style | paragraph or character; font, size token, colour token, spacing, keep options, hyphenation |
+| PageTemplate | id, name, background items, header/footer stories, page-number fields |
+| Bibliography | source file ref, entries (as imported BibLaTeX text), style id, cited keys |
+
+Rich text is stored as a small, Frisket-owned node schema (paragraph, heading, list, listItem, text with marks bold/italic/sup/sub/code/link, citation, crossRef, inlineMath, mergeField). The ProseMirror schema in the UI mirrors it one-to-one; a round-trip test guards the mapping.
+
+## 8. Output, preflight and import
+
+All output comes from the same Typst compile the canvas shows, so the PDF matches the screen. v1 output is RGB with an sRGB output intent; CMYK conversion and PDF/X are deferred.
+
+### Export implementation
+
+| Output | Mechanism | Notes |
+| --- | --- | --- |
+| Print PDF | typst-pdf; page generated at trim + bleed with crop marks drawn in the slug; lopdf sets TrimBox and BleedBox | Fonts embedded and subset by Typst; document title and author metadata set |
+| Screen PDF | Same compile with images downsampled to a target ppi before compile | Links and QR targets become PDF link annotations |
+| PNG / JPEG | typst-render at chosen DPI or exact pixel size | sRGB |
+| A4 handout | Poster page placed scaled on an A4 page in a wrapper document | Warns if body text falls below 7 pt |
+| Booklet imposition | Pages reordered into saddle-stitch spreads; count padded to a multiple of 4 | Duplex, short-edge flip note on the first sheet |
+| Data merge | One compile per record, reusing measurement caches | Single PDF or one file per record; names from a field |
+
+### Preflight engine
+
+- Each check is a `PreflightRule` with id, severity (issue / suggestion), scope, a detector over the model plus layout map, and an optional fix returning `Command`s (fixes undo like any edit).
+- Rules run after each relayout (debounced 250 ms) and feed the toolbar badge; the Preflight screen runs them all.
+- Minimum text size is a function of viewing distance with a rule table per document kind; defaults need calibration (open question).
+- Distance preview: the page PNG is scaled to the visual angle of the chosen distance and blurred to typical acuity (CSS transform + filter in the webview).
+- Colour-vision simulation: published CVD matrices applied in Rust to the page PNG (Machado et al. 2009 matrices).
+- Effective resolution = pixel size ÷ placed size; 150 ppi warn, 100 ppi issue for print.
+- Contrast: WCAG relative luminance on theme foreground and background tokens, plus text placed over images sampled from the PNG.
+- Conference presets are JSON files (size limits, required sections, required elements) users can add and share; they carry their own `formatVersion` under the same contract.
+
+### Import mapping
+
+| Source | Mapped to |
+| --- | --- |
+| DOCX | Heading 1–2 → sections; paragraphs → text; inline images → figures; tables → tables; lists preserved |
+| Markdown / QMD | `#`/`##` → sections; images → figures; pipe tables → tables; `$…$` math → equations; code chunks skipped; YAML title/author → header |
+| PPTX (poster) | Each slide → page; text boxes, pictures, shapes, tables → Free frames at the same geometry; theme colours → palette |
+| CSV / TSV / XLSX | Table block or data-merge source |
+| BibTeX / BibLaTeX / CSL-JSON | Bibliography entries |
+| Clipboard | HTML → styled text mapped to theme styles; images → figures; tab-separated text → table |
+
+## 9. Non-functional targets and testing
+
+Targets are measured on an M-series MacBook Pro with a reference A0 poster (12 sections, 6 vector figures, 2 tables, 30 references) and a 48-page booklet. Every target has a benchmark (`cargo bench` with criterion, or a Playwright timing test) that fails CI nightly on a >20% regression.
+
+| Area | Target |
+| --- | --- |
+| Keystroke to character on screen (overlay editor) | < 16 ms |
+| Typst re-render visible after a text edit, reference poster | < 150 ms |
+| Relayout after a structural edit (move, resize, span change) | < 100 ms |
+| Canvas pan and zoom | 60 fps (CSS transform; re-render only on zoom settle) |
+| Linked figure refresh after file change | < 1 s |
+| Open reference poster / booklet | < 1 s / < 2 s |
+| Print PDF export, reference poster | < 3 s |
+| Crash recovery | At most the last autosave interval (30 s) lost |
+| File safety | No save can corrupt an existing file (atomic replace, validated) |
+| Compatibility | Every file in the compatibility corpus opens in every later build (File format contract) |
+
+### Testing strategy
+
+| Suite | Tool | What it proves | CI |
+| --- | --- | --- | --- |
+| Model unit tests | `cargo test`, proptest | Commands apply and invert exactly; IDs stable | PR |
+| Format round-trip | `cargo test` | Write → read → write is byte-identical | PR |
+| Format compatibility corpus | `cargo test -p frisket-format --test compat` | Every historical fixture opens, migrates and renders | PR |
+| Schema guard | `cargo run -p xtask -- schema-check` | Committed JSON Schema matches the code; minor bumps are additive only | PR |
+| Flow solver golden tests | insta (JSON snapshots) | Known inputs give expected frames and overflow | PR |
+| Typst codegen snapshots | insta | Generated Typst for fixtures is stable and reviewed | PR |
+| Render snapshots | typst-render PNG vs reference, image-compare | Visual output within 0.5% pixels / 2/255 | PR |
+| PDF checks | lopdf | Fonts embedded, boxes set, page count, links present | PR |
+| Importer fixtures | `cargo test -p frisket-import` | Sample DOCX, MD, QMD, PPTX, XLSX, BibTeX map as specified | PR |
+| Preflight rules | `cargo test -p frisket-features` | Each rule fires on its fixture, not on a clean one; fixes clear it | PR |
+| CLI tests | assert\_cmd | Exit codes, report JSON schema, output files | PR |
+| UI unit tests | Vitest + testing-library + jsdom | Components, stores, editor schema mapping | PR |
+| UI flow tests | Playwright against the Vite build with mocked IPC (`@tauri-apps/api/mocks`) | New document → add figure → export dialog | PR |
+| App smoke test | Scripted checklist on macOS (`docs/smoke.md`), run before each tag | Real window, real files, real PDF | Manual per release |
+| Performance | criterion + Playwright timings | Targets above | Nightly |
+
+Note: `tauri-driver` WebDriver testing does not support macOS, which is why UI flows are tested against the web build with mocked IPC and the real app gets a short scripted smoke test.
+
+### Quality rules
+
+- Every format change follows the File format contract checklist.
+- Every bug fix adds a failing fixture or test first.
+- `cargo clippy -D warnings`, `rustfmt`, `svelte-check`, ESLint and Prettier enforced in CI; `unsafe` forbidden in all crates (`#![forbid(unsafe_code)]`).
+
+## 10. Implementation plan
+
+v1 is built in 11 phases, P0–P10; each ends in a runnable build on Gitea. A usable poster tool exists after P6. The file format is frozen as format 1.0 at the end of P1, and from that moment every build must open every file any earlier build saved — there is no "pre-release" exemption. Size: S ≈ 1 unit, M ≈ 2, L ≈ 3–4.
+
+| Phase | Delivers | Exit criterion | Size |
+| --- | --- | --- | --- |
+| P0 Foundations and spikes | Repo, workspace, Tauri shell, CI, 6 spikes | Blank A0 page renders from Typst in the window; CI green | M |
+| P1 Model, format and canvas | Model, commands, undo, `.frisket` format 1.0, compat corpus, Free-mode canvas | Draw, move, undo, save, reopen identical; format 1.0 frozen | L |
+| P2 Text and styles | Stories, overlay editor, styles, overset, spell check | Type a styled multi-column section; overset flagged | L |
+| P3 Structure and themes | Flow solver, outline, block types, themes, templates, New Document flow | Poster built from the New Document flow, re-themed live | L |
+| P4 Figures and the R link | Images, vector PDF/SVG, watched folders, link manager, captions, numbering, icons, brand kit | Re-running an R script updates the poster within 1 s | M |
+| P5 Scientific content | Tables, equations, citations, QR, CONSORT/PRISMA, cross-references | Reference poster fully reproducible | L |
+| P6 Export and CLI | Print/screen PDF, PNG, A4 handout, `frisket` CLI | Print-shop-ready PDF; CLI export from an R pipeline | M |
+| P7 Preflight | Rule engine, all checks, distance and CVD preview, fixes, conference presets | Every rule has a fixture; fixes undo cleanly | M |
+| P8 Multi-page and merge | Page templates, numbering, TOC, Document Flow, data merge, imposition | 48-page booklet and 200 certificates from CSV | L |
+| P9 Import | DOCX, MD, QMD, clipboard, PPTX import with convert assistant | Sample PowerPoint poster imports and converts to Flow | M |
+| P10 Assistant, polish, release | Assistant, Romanian UI, accessibility, performance, onboarding, updater | Section 9 targets met; 1.0 tagged | M |
+
+**Critical path.** P0 → P1 → P2 → P3 is strictly sequential. After P3, P4 and P5 can interleave; P7 can start once P6's renderer is stable; P8 and P9 are independent.
+
+### Release checkpoints
+
+| Build | After | Audience |
+| --- | --- | --- |
+| 0.1 "Poster alpha" | P6 | You, a real conference poster |
+| 0.5 "Beta" | P9 | Colleagues, internal Gitea release |
+| 1.0 | P10 | Public GitHub release under GPL-3.0-or-later |
+
+The task-level breakdown, with files, steps and acceptance per task, is in the **Working plan** tab.
+
+## 11. Development workflow
+
+The repository lives on the internal Gitea server (`git.twin-gray.ts.net`). Most CI runs on a cheap Linux runner because the core is plain Rust and the UI is plain web code; only the app bundle needs the macOS runner. Releases are ad-hoc signed and not notarized. A GitHub mirror is added at the public release.
+
+### Repository layout
+
+```text
+frisket/
+  Cargo.toml            workspace, pinned versions
+  crates/               frisket-model, -format, -flow, -typeset, -render, -import, -features, -cli
+  app/
+    src/                Svelte 5 UI
+    src-tauri/          Tauri shell (tauri.conf.json, capabilities/)
+  fixtures/
+    compat/             one folder per released format version — never edited, never deleted
+    figures/ import/ bib/ merge/ reference/ snapshots/
+  schema/               frisket-1.0.schema.json, frisket-1.1.schema.json, ...
+  fonts/                bundled OFL fonts
+  xtask/                repo automation (schema-check, bindings, fixtures)
+  docs/                 adr/, format/, smoke.md
+  .gitea/workflows/
+```
+
+- Trunk-based: `main` always builds; short-lived branches merged by pull request.
+- ADRs for each spike outcome and every format change.
+- LICENSE = GPL-3.0-or-later from the first commit; SPDX headers in source files; `THIRD_PARTY.md` generated by `cargo about` plus a hand-kept list for fonts, styles and icons.
+- Large binary fixtures in Git LFS.
+
+### CI on Gitea Actions
+
+| Job | Runner | Steps |
+| --- | --- | --- |
+| core | Linux (act\_runner in Docker, `rust:1` image + pnpm) | `cargo fmt --check`, `cargo clippy -D warnings`, `cargo test --workspace`, `cargo deny check`, `cargo xtask schema-check`, `cargo xtask bindings --check` |
+| ui | Linux | `pnpm install --frozen-lockfile`, `pnpm lint`, `pnpm check` (svelte-check), `pnpm test` (Vitest), `pnpm e2e` (Playwright, mocked IPC) |
+| app | macOS (act\_runner in host mode on the Mac, label `macos-arm64`) | `pnpm tauri build --target aarch64-apple-darwin`; upload the `.dmg` as an artifact |
+| nightly | both | Benchmarks, full render snapshot set, release-configuration build |
+| release (tag `v*`) | macOS | Build, ad-hoc sign, create the updater bundle and signature, publish a Gitea release with `.dmg`, `.app.tar.gz`, `.sig` and `latest.json` |
+
+Secrets: the updater private key (`TAURI_SIGNING_PRIVATE_KEY` and its password) in Gitea Actions secrets.
+
+### Distribution without notarization
+
+- `tauri.conf.json` → `bundle.macOS.signingIdentity: "-"` produces an ad-hoc signed `.app`; no Apple developer account needed.
+- First launch is blocked by Gatekeeper; the user allows it in System Settings → Privacy & Security → Open Anyway. The README documents this with screenshots.
+- The updater verifies each update with its minisign signature; the endpoint is the `latest.json` on the Gitea release while internal, and on GitHub Releases after launch. Whether updated builds need re-approval in Gatekeeper is checked in T10.8.
+- Adding notarization later = Developer ID certificate + `APPLE_*` secrets in the release job. Nothing in the architecture blocks it.
+
+### Later platforms
+
+Windows and Linux need: a Windows runner (or GitHub Actions after going public), WebView2 bootstrapper in the installer, fonts and file-association checks, and running the smoke checklist. The core crates are already tested on Linux from day one, which keeps this cheap.
+
+## 12. Risks, open questions and deferred items
+
+The largest risk is still scope; the second is in-place text editing. The phase order yields a usable poster tool at 0.1 even if later phases slip, and the P0 spikes test the editing approach before any feature depends on it.
+
+### Risks
+
+| Risk | Impact | Mitigation |
+| --- | --- | --- |
+| Scope too large for v1 | Release slips | Ship 0.1 after P6; P8–P10 features can move to 1.x without breaking the format |
+| Overlay editor feels different from final render | Users distrust WYSIWYG | Spike T0.6; theme fonts loaded in the webview; re-render within 150 ms; fallback: edit in the inspector with live canvas |
+| Typst API churn between versions | Upgrade work, layout drift | Pin exact version; upgrade only in a dedicated task with snapshot review; files never store Typst code |
+| Flow solver edge cases | Layout jumps | Golden tests from day one; deterministic ordering; Free mode as escape hatch |
+| Free-frame threading not expressible in Typst | Booklet/flyer limitation | Spike T0.7; fallback "continued" frames that split at paragraph boundaries |
+| Large posters slow as SVG in the webview | Laggy canvas | PNG tiles above 200% zoom; spike T0.5 measures |
+| Format change breaks old files | Lost trust, lost work | File format contract, compat corpus in CI, backups on upgrade |
+| Romanian hyphenation not in Typst | Ragged Romanian text | Verify in T0.4; fallback to no hyphenation for Romanian with ragged-right default |
+| Unnotarized builds deter users | Low adoption | Clear install docs; revisit notarization before 1.0 publicity |
+
+### Open questions
+
+- [ ] Name: keep Frisket, or pick Galley, Platen or ClinPress?
+- [ ] Minimum text sizes per viewing distance: which published guidance calibrates the rule table?
+- [ ] Which three conference poster presets to ship first?
+- [ ] Icon library scope: how many icons to bundle versus download on demand?
+
+### Deferred to 1.x and later
+
+| Item | Why deferred |
+| --- | --- |
+| Windows and Linux builds | macOS first; code stays portable and core tests already run on Linux |
+| CMYK conversion, spot colours, PDF/X | Large prepress effort; RGB PDF is accepted by most poster printers |
+| IDML import and export | Low value for the target persona |
+| HTML / interactive e-poster export | Typst HTML export still maturing; PNG and screen PDF cover v1 |
+| Footnotes, baseline grid, anchored objects in booklets | Polish beyond v1 needs |
+| Quick Look preview plugin | Needs a native macOS extension outside Tauri |
+| R package writing `.frisket` directly | The CLI covers pipeline automation in v1 |
+| Real-time collaboration, iPad app | Not needed for a solo-author tool |
+
+### Sources
+
+- [Typst 0.14 release: tagged PDF, PDF/A, PDF images](https://typst.app/blog/2025/typst-0.14/)
+- [Typst 0.15 release: variable fonts, multiple bibliographies, combined PDF standards](https://typst.app/blog/2026/typst-0.15/)
+- [Tauri 2 updater plugin](https://v2.tauri.app/plugin/updater/)
