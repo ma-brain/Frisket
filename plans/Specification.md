@@ -4,9 +4,11 @@ Sep 26, 2026 · @Marius A.
 
 ## 1. Overview
 
-Frisket is a desktop publisher that lets scientists produce print-ready posters, flyers, booklets, handouts and certificates without design training. It is a new app: built on Tauri 2 with a Rust core, a Svelte 5 interface and the Typst typesetting engine as its layout and PDF engine. It targets macOS first (Apple Silicon, macOS 14+), keeps the code portable, and adds Windows and Linux after 1.0. Licence: GPL-3.0-or-later.
+Frisket is a desktop publisher that lets scientists produce print-ready posters, flyers, booklets, handouts and certificates without design training. It is a new app: built on Tauri 2 with a Rust core, a Svelte 5 interface and the Typst typesetting engine as its layout and PDF engine. It targets macOS first (Apple Silicon, macOS 14+), keeps the code portable, and adds Windows and Linux after 1.0. The UI is English only.
 
-**Name.** A frisket is the hinged frame on a hand press that holds the sheet and masks the margins so only the intended area prints — a fit for an app built around structure, safe margins and preflight. It is short, unused by any known software product, and works as a file extension (`.frisket`). Alternatives if you prefer another direction: *Galley* (printers' proof tray), *Platen*, or *ClinPress* to match ClinSize, ClinRand and ClinSkimmer.
+**Licence.** Not decided yet: Frisket may ship as a paid, closed-source app or as open source. To keep both paths open, every code dependency must use a permissive licence (MIT, Apache-2.0, BSD, Zlib, ISC, CC0, Unicode) and every bundled font OFL 1.1 or Apache-2.0. No copyleft code (GPL, LGPL, AGPL, MPL) enters the build; the earlier AGPL citation component is gone. Bundled data under attribution licences (CSL styles CC BY-SA, icons CC BY) is allowed because it is data, not linked code, and is credited in the app.
+
+**Name.** A frisket is the hinged frame on a hand press that holds the sheet and masks the margins so only the intended area prints — a fit for an app built around structure, safe margins and preflight. It is short, unused by any known software product, and works as a file extension (`.frisket`).
 
 **Positioning.** Not an InDesign clone. Frisket is structure-first: the user edits sections, figures and a theme, and the layout follows. Free-form frames exist as an escape hatch. Its distinctive promise is a live link to the analysis pipeline: figures exported from R refresh on the poster automatically, and a CLI rebuilds the PDF from a pipeline.
 
@@ -16,11 +18,11 @@ Frisket is a desktop publisher that lets scientists produce print-ready posters,
 - Good defaults, no dead ends: kind, size, layout and theme can change later and content re-flows.
 - Explain, then fix: problems are described in plain language with a one-click, undoable fix.
 - Screen equals print: one engine (Typst, driven from Rust) produces the canvas image, the PDF and the CLI output. The webview never lays out document content.
-- Files are forever: a document saved by any released build opens in every later build (File format contract tab).
-- Local and open: one file per document, no account, no telemetry, GPL source.
+- Files are forever: a document saved by any released build opens in every later build ([File format contract](File-format-contract.md)).
+- Local and open: one file per document in a documented format, no account, no telemetry.
 - Scientific content is first-class: linked figures, tables, equations, citations and QR codes are native blocks.
 
-**Concept interface.** The mockups live on the [Frisket concept canvas](https://claude.ai/artifact/SjYAeSFnJm2zVPgv6jnpwT): New document, Poster workspace, Preflight, Booklet, plus the screens added for this version (section 5).
+**Concept interface.** Twelve mockup screens live in `ui/01-home.png` … `ui/12-booklet.png`; section 5 lists them. Where the mockups and the text disagree, section 5 says which wins.
 
 ## 2. Stack decision and feasibility
 
@@ -34,7 +36,7 @@ Tauri 2 is feasible for this app on one condition: document layout and PDF outpu
 
 | Concern | Choice | Notes |
 | --- | --- | --- |
-| App shell | Tauri 2 | Same as ClinSkimmer; one window per document |
+| App shell | Tauri 2 | Same as ClinSkimmer; one window, every document and Settings open as tabs |
 | UI | Svelte 5 (runes), TypeScript strict, Vite, pnpm | Panels, dialogs, canvas viewer, overlays |
 | Core logic | Rust workspace (`crates/`) | Model, format, layout, render, features — no UI code |
 | Layout, text, math, citations | Typst crates, version pinned per release | Driven through a custom `World` |
@@ -51,6 +53,7 @@ Tauri 2 is feasible for this app on one condition: document layout and PDF outpu
 | --- | --- | --- |
 | TextKit 1 threaded frames | Typst paragraph layout; stories flow across columns and pages natively | Free-frame to free-frame threading becomes a P0 spike; fallback is "continued" frames |
 | Core Graphics renderer | Typst SVG / PNG / PDF output | Canvas and PDF share one layout by construction |
+| NSDocument windows | One window with a tab strip; sheets inside the tab | Home, documents and Settings are tabs; dialogs never open new windows |
 | SwiftMath | Typst math; LaTeX input converted with MiTeX | Users may type LaTeX or Typst math |
 | citeproc-js in JavaScriptCore (AGPL) | Typst's built-in bibliography engine (hayagriva) | No AGPL component; CSL styles still supported |
 | NSDocument autosave and versions | Own autosave, crash recovery and snapshot history | Specified in F1 and the File format contract |
@@ -83,11 +86,11 @@ The primary user is a researcher who writes and analyses, not a designer. The qu
 | Handout / one-pager | 1–2 | A4, US Letter | Title, summary, key figure, contacts |
 | Programme booklet | 4–64 | A5, A4, B5 | Cover, day dividers, sessions, speakers, sponsors |
 | Certificate / badge | 1 per record | A4 landscape, badge 90×55 mm, 4×3 in | Merge fields from CSV |
-| Blank | any | any | Free frames, no preset |
+| Blank (default) | any | A4 portrait; other sizes one click away | One Flow column, 15 mm margins, empty outline; Free frames can be added |
 
 **Core workflows**
 
-1. New document: choose kind → size → layout → theme → optionally import an abstract (.docx, .md, .qmd).
+1. New document: on the Home board pick Blank A4 (selected by default) or a template card, or start from a file (abstract .docx/.md/.qmd, PowerPoint poster, spreadsheet list); Create, Return or double-click opens it in a new tab. Size, layout and theme can change at any time afterwards.
 2. Fill content: type into sections, drop figures from a watched folder, paste tables, add equations and citations.
 3. Iterate with the analysis: re-run R; linked figures refresh; captions and numbering stay in place.
 4. Preflight: fix overflows, low-resolution images, small text and contrast issues.
@@ -103,7 +106,8 @@ v1 keeps the full scope of 14 feature areas, F1–F14. Each bullet names the mec
 - Page sizes: ISO A/B, US sizes, poster sizes, 16:9 screen, custom in mm/in/pt/px.
 - Bleed and slug per document; safe-area margins shown as guides.
 - Facing pages and spreads for booklets.
-- Template gallery: 3 layouts × 6 themes per kind at launch; "Save as template" for user templates (templates are `.frisket` files in the app data folder).
+- Home board (screen 01): Blank A4 card first and selected by default, then one card per kind; filters All, Posters, Print, Multi-page, From a list, My templates; recent files and search in the sidebar; "Other sizes" links for the selected card. Dropping a `.frisket`, `.docx` or `.pptx` on the window opens or imports it.
+- Templates: 3 layouts × 6 themes per kind at launch, chosen after creation from the inspector; "Save as template" for user templates (templates are `.frisket` files in the app data folder).
 - Autosave every 30 s and on window blur to the app data folder; crash recovery offered at next launch.
 - Snapshot history: up to 50 snapshots per document kept in app data (not inside the file), browsable and restorable; "Revert to saved".
 
@@ -142,7 +146,7 @@ v1 keeps the full scope of 14 feature areas, F1–F14. Each bullet names the mec
 - Paragraph and character styles; theme-bound by default, overridable per style.
 - Stories flow across the columns of a block and across pages in Document Flow (booklets); overset indicator and overflow warnings. Threading between arbitrary Free frames is decided by spike T0.7.
 - Hyphenation and justification from Typst for its supported languages; keep-with-next, widow/orphan control.
-- Spell check in the editor overlay via the webview (system dictionaries; English, Romanian and others installed on the system).
+- Spell check in the editor overlay via the webview (system dictionaries; any language installed on the system, set per document or per style).
 - Find and replace across the document, including styles.
 - Special characters palette for science: Greek, ±, ≤, ≥, µ, °, arrows, superscript numerals.
 - Text fitting: shrink or grow a section's text within limits to fit its box (never below the preflight minimum).
@@ -152,14 +156,26 @@ v1 keeps the full scope of 14 feature areas, F1–F14. Each bullet names the mec
 - Theme = palette (primary, accent, surface, text, muted), type pairing, type scale, spacing scale, figure palette.
 - Type scale derives from document kind and viewing distance.
 - Colour-blind-safe figure palettes (Okabe–Ito, viridis family) with preview.
-- Bundled open-licence fonts (OFL) for every built-in theme, so documents lay out identically on every machine.
+- Five bundled font families, chosen to be metric-compatible with the fonts most Word and PowerPoint files arrive in, so imports keep their line breaks and documents lay out identically on every machine:
+
+  | Family | Metric-compatible with | Licence |
+  | --- | --- | --- |
+  | Liberation Sans | Arial, Helvetica | SIL OFL 1.1 |
+  | Liberation Serif | Times New Roman | SIL OFL 1.1 |
+  | Carlito | Calibri | SIL OFL 1.1 |
+  | Caladea | Cambria | Apache-2.0 |
+  | Lora | — (headings and posters) | SIL OFL 1.1 |
+
+  Each ships Regular, Italic, Bold and Bold Italic. Equations use New Computer Modern Math (bundled). Defaults for new documents: body Liberation Sans, headings Lora (changeable in Settings › Fonts).
+- System fonts are offered below the built-in ones ("Fonts on this Mac", on by default, can be hidden); a document using one gets a preflight note offering the closest built-in family.
 - Brand kit: institution logos, colours and fonts saved once and applied to any document.
 - Export theme to R: writes a ggplot2 theme and palette file so figures match the document fonts and colours.
 
 ### F6. Figures, assets and the R link
 
 - Watched folders: link a folder (e.g. `output/figures`); new or changed files update linked figures (`notify` crate, debounced 300 ms).
-- Link manager: status per asset (in sync, modified, missing, low resolution), relink, embed, reveal in Finder.
+- Link manager: status per asset (in sync, modified, missing, low resolution, embedded), relink, embed, embed all, unlink, reveal in Finder.
+- Automatic relink: when linked files are missing, Frisket searches the watched folders and folders near the document for files with the same name and SHA-256 and offers "Use the found files" (screen 11).
 - Vector PDF and SVG figures placed natively by Typst, never rasterised.
 - Fit modes: fit width, fill (crop), original size; crop and focal point.
 - Captions with automatic figure and table numbering in reading order; cross-references that update.
@@ -218,24 +234,39 @@ v1 keeps the full scope of 14 feature areas, F1–F14. Each bullet names the mec
 
 ### F14. App experience
 
-- English and Romanian UI at launch (svelte-i18n style message catalogues).
+- English UI only; strings are kept in one module so a translation layer can be added later without touching components.
+- One window with a tab strip: Home, each open document and Settings are tabs; `+` opens Home in a new tab. Export, file-version, crash-recovery and relink dialogs appear as sheets inside the current tab.
+- Settings tab (screen 10) with sections: General (units, default page size, autosave, default theme and brand kit), Fonts, Figures and R (watched-folder defaults, theme export), Export defaults, Assistant (endpoint), Command line (install the CLI), Updates. No language section.
 - Full keyboard shortcuts, screen-reader labels on every control, light and dark mode for the app chrome.
-- : first-run sample poster with inline tips.
+- Onboarding: first-run sample poster with inline tips.
 - In-app updates via tauri-plugin-updater.
 
 ## 5. UI specification
 
-The UI is a three-pane document window (outline, canvas, inspector) plus a New Document flow, a Preflight mode and the dialogs below. All chrome is Svelte in the webview; the page image comes from Rust. The window uses Tauri's overlay title bar on macOS so it looks native (traffic lights inset into the toolbar).
+The app is one window. A tab strip at the top holds Home, every open document and Settings; `+` opens a new Home tab. A document tab is a three-pane workspace (outline, canvas, inspector) with an Edit / Preflight mode switch. Export, file-version, crash-recovery and relink dialogs are sheets inside the current tab, never separate windows. All chrome is Svelte in the webview; the page image comes from Rust. The window uses Tauri's overlay title bar on macOS so it looks native (traffic lights inset into the tab strip).
 
 ### Window layout
 
-| Region | Width | Contents |
+| Region | Size | Contents |
 | --- | --- | --- |
-| Toolbar | full, 52 px | Document name and kind; insert tools (Select, Text, Figure, Table, Equation, Shape, QR, Icon); Auto-arrange; Preflight badge; Export |
-| Left sidebar | 260 px, collapsible | Tabs: Structure (outline in reading order), Pages (thumbnails, page templates), Assets (links, watched folders, icons, brand kit) |
-| Canvas | flexible | Pages on a neutral pasteboard; zoom 10–800%; grid, guides, selection handles, overflow markers |
-| Inspector | 300 px, collapsible | Tabs: Block (context-sensitive), Theme, and Text styles when text is selected |
-| Status bar | full, 28 px | Page size, grid, zoom, save state, file format version |
+| Tab strip | full, 44 px | Home tab, document tabs (dot = unsaved, × = close), Settings tab, `+` |
+| Toolbar | full, 52 px | Undo, redo; document name, kind, size, page count; insert tools (Select, Text, Figure, Table, Equation, Shape, QR/Icon grid, Favourites); Auto-arrange; Edit / Preflight switch; Preflight badge ("all clear" or "n issues"); Export |
+| Left sidebar | 260 px, collapsible | Tabs: Structure (outline in reading order, status tags such as linked / low res / overflow, Add section), Pages (page templates, thumbnails, spreads), Assets (watched folders, linked files, icons, brand kit logos). A context card at the bottom (page summary or watched-folder status) |
+| Canvas | flexible | Pages on a neutral pasteboard; zoom 10–800%; grid, guides, selection handles, overflow markers; zoom control in the bottom-right corner |
+| Inspector | 300 px, collapsible | Context-sensitive tabs (below) |
+| Status bar | full, 28 px | Page size, grid, zoom, context info (preflight counts, records, citations); save state and file format version on the right |
+
+**Inspector tabs by context**
+
+| Context | Tabs | Mockup |
+| --- | --- | --- |
+| Text selected or being edited | Text · Page · Theme | 02 |
+| Block selected (figure, table, …) | Block · Page · Theme | 03 |
+| Booklet / multi-page with styles in use | Text styles · Theme | 12 |
+| References view | Style · Block | 08 |
+| Data merge document | Data · Fields · Output | 07 |
+
+Full-width views (Linked files 06, References 08, Theme 09) replace the canvas within the tab and have a "Back to page" button.
 
 ### Canvas composition (webview)
 
@@ -244,32 +275,43 @@ The UI is a three-pane document window (outline, canvas, inspector) plus a New D
 3. Overlay layer in page coordinates: block outlines, selection handles, insertion marker, overflow and reading-order badges, guides. Positions come from the layout map (block id → page rectangles in pt) returned with every render.
 4. Editor layer: the ProseMirror overlay, placed over the block being edited, using the theme's fonts and sizes.
 
+### Canvas navigation
+
+- ⌘ + scroll wheel, or trackpad pinch, zooms toward the mouse pointer (the point under the cursor stays fixed).
+- Space + drag pans; plain scroll and two-finger swipe pan as usual.
+- ⌘0 fits the page, ⌘1 shows 100%, ⌘+ / ⌘− step zoom.
+- A zoom control in the bottom-right corner: −, slider, +, current zoom, "Fit page", "100%".
+- The zoom level also shows in the status bar. A one-time hint bar explains the gestures on first use (02).
+- Zoom and pan are CSS transforms; Rust re-renders only when zoom settles.
+
 ### Interaction model
 
 - Plain language first: "1 column / 2 columns / Full", "Fit width", "Make room". Expert controls sit behind "Show details".
 - Insert = drop onto the canvas or the outline; blocks snap into the nearest column slot with a live insertion marker.
-- Drag files from Finder or a watched folder onto a figure placeholder to fill it (Tauri drag-drop events).
+- Drag files from Finder or a watched folder onto a figure placeholder to fill it (Tauri drag-drop events). An empty page invites dropping a figure, a .docx or a CSV anywhere on it.
 - Double-click enters text editing; Escape leaves it; Tab moves to the next block in reading order.
 - Every inspector change is one undo step; drags and typing coalesce (typing: one step per 1 s pause or word boundary).
 - Context menus mirror inspector actions; command palette (⌘K) lists every action by name.
+- Tabs: ⌘T new Home tab, ⌘W close tab (asks to save if dirty), ⌃Tab / ⌃⇧Tab cycle tabs, ⌘, opens the Settings tab.
 
 ### Screens
 
-Screens 1–4 are the approved concepts; 5–11 were added in this version. All are on the [Frisket concept canvas](https://claude.ai/artifact/SjYAeSFnJm2zVPgv6jnpwT).
+The mockups in `ui/` are the reference for layout and wording. Where a mockup and this text disagree, this text wins and the mockup is updated.
 
-| # | Screen | Purpose | Key elements |
-| --- | --- | --- | --- |
-| 1 | New document | Start from intent | Kind cards, size chips, layout thumbnails, theme picker, abstract import |
-| 2 | Poster workspace | Edit | Outline, canvas, inspector, watched-folder status |
-| 3 | Preflight | Check before export | Distance slider, colour-vision toggle, issue cards with fixes, passed checks |
-| 4 | Booklet | Multi-page editing | Page templates, spreads, story flow across pages, text styles |
-| 5 | Export | Output | Presets (Print PDF, Screen PDF, PNG, A4 handout, Booklet print), bleed and marks, live size estimate, file naming |
-| 6 | Assets and links | Manage linked files | Watched folders, table of assets with status, relink, embed, resolution per placement |
-| 7 | Data merge | Records to pages | CSV/XLSX preview, field mapping, record stepper, output choice |
-| 8 | References | Citations | Library from .bib, search, cited/uncited filter, style picker, live bibliography preview |
-| 9 | Theme and brand kit | Look | Palette, type pairing, viewing distance, figure palette with CVD preview, brand logos, Export theme to R |
-| 10 | Settings | App-wide | Units, default theme and brand kit, watched-folder defaults, assistant endpoint, CLI install, language, updates |
-| 11 | File version dialogs | Compatibility | Open older file (upgrade with backup), open newer file (read-only), crash recovery |
+| # | File | Screen | Purpose | Key elements |
+| --- | --- | --- | --- | --- |
+| 01 | `ui/01-home.png` | Home | Start something new | Card board with Blank A4 default, kind cards, filters, recents and search, "Start from a file" (abstract, PowerPoint poster, spreadsheet list), selection bar with other sizes and Create |
+| 02 | `ui/02-blank-a4.png` | Blank A4 with font menu | Empty document | Empty outline with Add text/figure/table, Title block being edited, font menu with built-in families and "Fonts on this Mac", zoom hints and control |
+| 03 | `ui/03-poster-workspace.png` | Poster workspace | Edit | Outline with status tags, canvas with selected linked figure and overflow marker, watched-folder status, zoom control |
+| 04 | `ui/04-preflight.png` | Preflight | Check before export | Colour-vision simulation, distance slider, issue cards with fixes, suggestion, passed checks |
+| 05 | `ui/05-export.png` | Export (sheet) | Output | Presets (Print PDF, Screen PDF, PNG, A4 handout, Booklet print), options per preset, bleed preview and size estimate, file name and folder, equivalent CLI command, open preflight issues |
+| 06 | `ui/06-assets.png` | Linked files | Manage linked files | Watched folders, library (linked files, icons, brand kit logos), table with status, last change and print quality, reveal, embed, relink, R hint for low resolution |
+| 07 | `ui/07-data-merge.png` | Data merge | Records to pages | Record stepper with real data, data preview, field mapping, output (one PDF or one file per record), file-name pattern, overflow warnings per record |
+| 08 | `ui/08-references.png` | References | Citations | Linked .bib library, search, cited / not-cited filter, style picker, live bibliography preview, `@` citation insert, move behind QR |
+| 09 | `ui/09-theme.png` | Theme and brand kit | Look | Theme cards, palette with contrast check, type pairing, "Sizes set for" viewing distance, figure palette with CVD preview, brand kit, Export theme to R |
+| 10 | `ui/10-settings.png` | Settings › Fonts | App-wide settings | Sections General, Fonts, Figures and R, Export defaults, Assistant, Command line, Updates; built-in font table, system-font toggle, default body and heading fonts |
+| 11 | `ui/11-file-dialogs.png` | File version dialogs (sheets) | Compatibility and recovery | Older file (upgrade, backup kept), newer file (read-only), crash recovery (restore as tabs), linked figures moved (use found files) |
+| 12 | `ui/12-booklet.png` | Booklet | Multi-page editing | Page templates, page thumbnails and spreads, story flowing across pages, text styles with usage counts |
 
 ### Visual language
 
@@ -311,14 +353,15 @@ Arrows point to dependencies. `frisket-model` depends only on serde, uuid and sc
 | `crates/frisket-import` | DOCX, MD/QMD, PPTX, CSV/TSV/XLSX, BibTeX/CSL-JSON, clipboard HTML → model commands |
 | `crates/frisket-features` | Preflight rules, data merge, theme export to R, folder watching, assistant client |
 | `crates/frisket-cli` | `frisket` binary (clap) |
-| `app/src-tauri` | Tauri 2 shell: window per document, sessions, commands, events, menus, updater, dialogs |
-| `app/src` | Svelte 5 UI: panels, canvas viewer and overlays, ProseMirror editor, dialogs, i18n |
+| `app/src-tauri` | Tauri 2 shell: the single window, session registry (one session per open document tab), commands, events, menus acting on the active tab, updater, native file dialogs |
+| `app/src` | Svelte 5 UI: tab strip and tab router (Home, document, Settings), panels, canvas viewer and overlays, ProseMirror editor, sheets |
 
 ### IPC contract
 
 - Types crossing the bridge are Rust structs exported to TypeScript with `specta` + `tauri-specta`; the generated `app/src/lib/bindings.ts` is committed and CI fails if it is stale. Nobody hand-writes a TS type for a Rust struct.
 - Commands (all `async`, all return `Result<T, AppError>`): `doc_new`, `doc_open`, `doc_save`, `doc_save_as`, `doc_close`, `doc_apply(doc, commands, coalesce_key?) → DocDelta`, `doc_undo`, `doc_redo`, `render_page(doc, page, format, zoom, rev) → RenderedPage`, `layout_map(doc, page, rev)`, `preflight_run(doc)`, `export(doc, preset, path)`, `assets_*`, `merge_*`, `settings_get/set`.
-- Events (Rust → UI): `doc-changed {doc, rev, dirty_pages}`, `asset-changed {doc, asset, status}`, `preflight-updated {doc, summary}`, `autosaved {doc, at}`.
+- Events (Rust → UI): `doc-changed {doc, rev, dirty_pages}`, `asset-changed {doc, asset, status}`, `preflight-updated {doc, summary}`, `autosaved {doc, at}`, `open-request {path}` (Finder open or drag onto the window; the UI opens or focuses a tab).
+- Tabs are a UI concept: each document tab holds a `doc` handle, and every command and event carries it. Closing a tab calls `doc_close`. The Rust side keeps a registry of open sessions so opening a file already open focuses its tab instead of creating a second session.
 - Every render request carries the model `rev`; the UI discards any result whose `rev` is older than what it already shows.
 - Large binary results (PNG tiles) return as raw bytes through `tauri::ipc::Response`, never base64 in JSON.
 
@@ -335,7 +378,7 @@ Arrows point to dependencies. `frisket-model` depends only on serde, uuid and sc
 
 ### Third-party dependencies
 
-Licences are checked in CI by `cargo deny` (Rust) and `license-checker` (pnpm) against an allowlist compatible with GPL-3.0-or-later. Adding anything not in this table needs an ADR.
+Licences are checked in CI by `cargo deny` (Rust) and `license-checker` (pnpm) against a permissive-only allowlist (MIT, Apache-2.0, BSD-2/3-Clause, ISC, Zlib, CC0-1.0, Unicode-3.0, MIT-0), so the product can later be released either closed-source or open-source (section 1). Copyleft licences (GPL, LGPL, AGPL, MPL, EPL) are denied. Adding anything not in this table needs an ADR.
 
 | Library | Use | Licence |
 | --- | --- | --- |
@@ -355,13 +398,14 @@ Licences are checked in CI by `cargo deny` (Rust) and `license-checker` (pnpm) a
 | specta, tauri-specta | Typed IPC bindings | MIT |
 | svelte 5, vite | UI | MIT |
 | prosemirror-\* | Rich-text overlay editor | MIT |
-| Bundled fonts (Source Serif 4, Source Sans 3, IBM Plex, Atkinson Hyperlegible, New Computer Modern Math) | Themes, math | SIL OFL 1.1 |
+| Bundled fonts (Liberation Sans, Liberation Serif, Carlito, Lora, New Computer Modern Math) | Text, headings, math | SIL OFL 1.1 (NCM Math: GUST Font License) |
+| Bundled font Caladea | Text (Cambria-compatible) | Apache-2.0 |
 | CSL styles | Citation styles (data) | CC BY-SA 3.0, attributed |
 | Servier Medical Art, Bioicons | Icon library (data) | CC BY 4.0 and per-icon licences, attributed |
 
 ## 7. Document model
 
-A document is a tree of pages holding blocks in reading order, plus shared stories, styles, a theme and an asset table. Geometry is stored in points (1/72 in) as `f64`; the UI converts to mm, in or px. How this model is written to disk, versioned and migrated is binding and lives in the **File format contract** tab; this section only names the entities.
+A document is a tree of pages holding blocks in reading order, plus shared stories, styles, a theme and an asset table. Geometry is stored in points (1/72 in) as `f64`; the UI converts to mm, in or px. How this model is written to disk, versioned and migrated is binding and lives in [File-format-contract.md](File-format-contract.md); this section only names the entities.
 
 | Entity | Key fields |
 | --- | --- |
@@ -465,17 +509,17 @@ v1 is built in 11 phases, P0–P10; each ends in a runnable build on Gitea. A us
 
 | Phase | Delivers | Exit criterion | Size |
 | --- | --- | --- | --- |
-| P0 Foundations and spikes | Repo, workspace, Tauri shell, CI, 6 spikes | Blank A0 page renders from Typst in the window; CI green | M |
+| P0 Foundations and spikes | Repo, workspace, single-window tabbed Tauri shell, CI, 7 spikes | Blank A0 page renders from Typst in a document tab; CI green | M |
 | P1 Model, format and canvas | Model, commands, undo, `.frisket` format 1.0, compat corpus, Free-mode canvas | Draw, move, undo, save, reopen identical; format 1.0 frozen | L |
 | P2 Text and styles | Stories, overlay editor, styles, overset, spell check | Type a styled multi-column section; overset flagged | L |
-| P3 Structure and themes | Flow solver, outline, block types, themes, templates, New Document flow | Poster built from the New Document flow, re-themed live | L |
+| P3 Structure and themes | Flow solver, outline, block types, themes, templates, Home board | Poster created from the Home board, re-themed live | L |
 | P4 Figures and the R link | Images, vector PDF/SVG, watched folders, link manager, captions, numbering, icons, brand kit | Re-running an R script updates the poster within 1 s | M |
 | P5 Scientific content | Tables, equations, citations, QR, CONSORT/PRISMA, cross-references | Reference poster fully reproducible | L |
 | P6 Export and CLI | Print/screen PDF, PNG, A4 handout, `frisket` CLI | Print-shop-ready PDF; CLI export from an R pipeline | M |
 | P7 Preflight | Rule engine, all checks, distance and CVD preview, fixes, conference presets | Every rule has a fixture; fixes undo cleanly | M |
 | P8 Multi-page and merge | Page templates, numbering, TOC, Document Flow, data merge, imposition | 48-page booklet and 200 certificates from CSV | L |
 | P9 Import | DOCX, MD, QMD, clipboard, PPTX import with convert assistant | Sample PowerPoint poster imports and converts to Flow | M |
-| P10 Assistant, polish, release | Assistant, Romanian UI, accessibility, performance, onboarding, updater | Section 9 targets met; 1.0 tagged | M |
+| P10 Assistant, polish, release | Assistant, accessibility, performance, onboarding, updater, licence decision applied | Section 9 targets met; 1.0 tagged | M |
 
 **Critical path.** P0 → P1 → P2 → P3 is strictly sequential. After P3, P4 and P5 can interleave; P7 can start once P6's renderer is stable; P8 and P9 are independent.
 
@@ -485,13 +529,13 @@ v1 is built in 11 phases, P0–P10; each ends in a runnable build on Gitea. A us
 | --- | --- | --- |
 | 0.1 "Poster alpha" | P6 | You, a real conference poster |
 | 0.5 "Beta" | P9 | Colleagues, internal Gitea release |
-| 1.0 | P10 | Public GitHub release under GPL-3.0-or-later |
+| 1.0 | P10 | Public release; channel and licence per the licence decision (section 1) |
 
-The task-level breakdown, with files, steps and acceptance per task, is in the **Working plan** tab.
+The task-level breakdown, with files, steps and acceptance per task, is in [Working-plan.md](Working-plan.md).
 
 ## 11. Development workflow
 
-The repository lives on the internal Gitea server (`git.twin-gray.ts.net`). Most CI runs on a cheap Linux runner because the core is plain Rust and the UI is plain web code; only the app bundle needs the macOS runner. Releases are ad-hoc signed and not notarized. A GitHub mirror is added at the public release.
+The repository lives on the internal Gitea server (`git.twin-gray.ts.net`). Most CI runs on a cheap Linux runner because the core is plain Rust and the UI is plain web code; only the app bundle needs the macOS runner. Releases are ad-hoc signed and not notarized. The GitHub repository (`ma-brain/frisket`) is a mirror of Gitea; Gitea is the source of truth and runs CI.
 
 ### Repository layout
 
@@ -514,7 +558,7 @@ frisket/
 
 - Trunk-based: `main` always builds; short-lived branches merged by pull request.
 - ADRs for each spike outcome and every format change.
-- LICENSE = GPL-3.0-or-later from the first commit; SPDX headers in source files; `THIRD_PARTY.md` generated by `cargo about` plus a hand-kept list for fonts, styles and icons.
+- Until the licence is decided, source files carry a copyright header without an SPDX licence tag and the repository has no LICENSE file (all rights reserved). `THIRD_PARTY.md` is generated by `cargo about` plus a hand-kept list for fonts, styles and icons from the first commit.
 - Large binary fixtures in Git LFS.
 
 ### CI on Gitea Actions
@@ -533,7 +577,7 @@ Secrets: the updater private key (`TAURI_SIGNING_PRIVATE_KEY` and its password) 
 
 - `tauri.conf.json` → `bundle.macOS.signingIdentity: "-"` produces an ad-hoc signed `.app`; no Apple developer account needed.
 - First launch is blocked by Gatekeeper; the user allows it in System Settings → Privacy & Security → Open Anyway. The README documents this with screenshots.
-- The updater verifies each update with its minisign signature; the endpoint is the `latest.json` on the Gitea release while internal, and on GitHub Releases after launch. Whether updated builds need re-approval in Gatekeeper is checked in T10.8.
+- The updater verifies each update with its minisign signature; the endpoint is the `latest.json` on the Gitea release while internal; the public channel is chosen with the licence decision. Whether updated builds need re-approval in Gatekeeper is checked in T10.8.
 - Adding notarization later = Developer ID certificate + `APPLE_*` secrets in the release job. Nothing in the architecture blocks it.
 
 ### Later platforms
@@ -555,15 +599,18 @@ The largest risk is still scope; the second is in-place text editing. The phase 
 | Free-frame threading not expressible in Typst | Booklet/flyer limitation | Spike T0.7; fallback "continued" frames that split at paragraph boundaries |
 | Large posters slow as SVG in the webview | Laggy canvas | PNG tiles above 200% zoom; spike T0.5 measures |
 | Format change breaks old files | Lost trust, lost work | File format contract, compat corpus in CI, backups on upgrade |
-| Romanian hyphenation not in Typst | Ragged Romanian text | Verify in T0.4; fallback to no hyphenation for Romanian with ragged-right default |
+| Hyphenation missing for a document language (e.g. Romanian content) | Ragged text in that language | Verify supported languages in T0.4; fallback to no hyphenation with ragged-right default |
+| Licence undecided | A copyleft dependency would close the commercial path | Permissive-only `cargo deny` allowlist from P0; decision recorded as an ADR before 0.5 |
+| Paid app without notarization | Gatekeeper warnings deter paying customers | If commercial: Developer ID + notarization before 1.0 (release job already prepared for `APPLE_*` secrets) |
 | Unnotarized builds deter users | Low adoption | Clear install docs; revisit notarization before 1.0 publicity |
 
 ### Open questions
 
-- [ ] Name: keep Frisket, or pick Galley, Platen or ClinPress?
+- [ ] Licence model: paid closed-source or open source (GPL-3.0-or-later)? Decide before 0.5; until then the permissive-only rule in section 1 applies.
 - [ ] Minimum text sizes per viewing distance: which published guidance calibrates the rule table?
 - [ ] Which three conference poster presets to ship first?
-- [ ] Icon library scope: how many icons to bundle versus download on demand?
+- [ ] Icon library scope: how many icons to bundle versus download on demand? Only icons whose licence allows use in a closed app (CC0, CC BY) are eligible.
+- [ ] Mockup 10 labels the equation font "Latin Modern Math"; the spec uses New Computer Modern Math (bundled with Typst). Update the mockup or switch the font.
 
 ### Deferred to 1.x and later
 
@@ -577,6 +624,7 @@ The largest risk is still scope; the second is in-place text editing. The phase 
 | Quick Look preview plugin | Needs a native macOS extension outside Tauri |
 | R package writing `.frisket` directly | The CLI covers pipeline automation in v1 |
 | Real-time collaboration, iPad app | Not needed for a solo-author tool |
+| UI translations | English only in v1; strings are kept in one module so a translation layer can be added |
 
 ### Sources
 
