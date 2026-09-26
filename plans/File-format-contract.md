@@ -19,10 +19,12 @@ A `.frisket` file is a ZIP archive (deflate; `mimetype` stored first, uncompress
 | `manifest.json` | yes | Format and writer metadata (§3) |
 | `document.json` | yes | The document model (Specification §7), UTF-8 JSON |
 | `assets/<sha256>.<ext>` | no | Embedded assets, named by content hash |
+| `assets/preview/<sha256>.png` | no | Cached preview of each linked asset (max 2048 px long edge), so a document with a missing link still renders (Working-plan T4.1) |
+| `styles/<name>.csl` | no | User-added CSL citation styles used by the document (T5.6) |
 | `preview.png` | no | First page, 512 px on the long edge, for Finder and the Home board |
 | `extensions/<name>/…` | no | Reserved for future optional data; readers ignore unknown folders and keep them on save |
 
-Linked assets are not stored; `document.json` records their relative path, absolute path hint and SHA-256. Snapshots, autosaves and undo history are never stored in the file (they live in the app data folder).
+Linked assets' original bytes are not stored (only their cached preview); `document.json` records their relative path, absolute path hint and SHA-256. Snapshots, autosaves and undo history are never stored in the file (they live in the app data folder).
 
 ## 3. Manifest
 
@@ -50,6 +52,7 @@ Linked assets are not stored; `document.json` records their relative path, absol
 | Rename or remove a field, change a unit or meaning, change a required structure | MAJOR | points → mm, rich-text schema change |
 
 - Minor bumps are additive only; `cargo xtask schema-check` enforces this by diffing the committed JSON Schema.
+- Version bumps are batched per implementation phase (Working-plan §1 "Format versions after 1.0 is frozen").
 - The schema for every released version is committed as `schema/frisket-X.Y.schema.json` and never edited after release.
 - Enum values unknown to a reader are preserved as-is and rendered with a documented fallback (unknown block type → grey placeholder box with its rect).
 
