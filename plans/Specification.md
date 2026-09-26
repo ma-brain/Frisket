@@ -547,7 +547,7 @@ The task-level breakdown, with files, steps and acceptance per task, is in [Work
 
 ## 11. Development workflow
 
-The repository lives on the internal Gitea server (`git.twin-gray.ts.net`). Most CI runs on a cheap Linux runner because the core is plain Rust and the UI is plain web code; only the app bundle needs the macOS runner. Releases are ad-hoc signed and not notarized. The GitHub repository (`ma-brain/frisket`) is a mirror of Gitea; Gitea is the source of truth and runs CI.
+The repository lives on the internal Gitea server (`git.twin-gray.ts.net`). All CI runs on one self-hosted runner: `act_runner` in host mode on the owner's Mac (label `macos-arm64`), so no GitHub Actions minutes are used. A Linux runner (Docker, `rust:1` image) can be added later for the core and UI jobs; the core is plain Rust and the UI plain web code, so nothing in the jobs is macOS-specific except the app bundle. Releases are ad-hoc signed and not notarized. The GitHub repository (`ma-brain/frisket`) is a mirror of Gitea; Gitea is the source of truth and runs CI.
 
 ### Repository layout
 
@@ -582,11 +582,13 @@ frisket/
 
 | Job | Runner | Steps |
 | --- | --- | --- |
-| core | Linux (act\_runner in Docker, `rust:1` image + pnpm) | `cargo fmt --check`, `cargo clippy -D warnings`, `cargo test --workspace`, `cargo deny check`, `cargo xtask schema-check`, `cargo xtask bindings --check` |
-| ui | Linux | `pnpm install --frozen-lockfile`, `pnpm lint`, `pnpm check` (svelte-check), `pnpm test` (Vitest), `pnpm e2e` (Playwright, mocked IPC) |
+| core | macOS host mode, label `macos-arm64` (later optionally Linux in Docker) | `cargo fmt --check`, `cargo clippy -D warnings`, `cargo test --workspace`, `cargo deny check`, `cargo xtask schema-check`, `cargo xtask bindings --check` |
+| ui | macOS host mode, label `macos-arm64` | `pnpm install --frozen-lockfile`, `pnpm lint`, `pnpm check` (svelte-check), `pnpm test` (Vitest), `pnpm e2e` (Playwright, mocked IPC) |
 | app | macOS (act\_runner in host mode on the Mac, label `macos-arm64`) | `pnpm tauri build --target aarch64-apple-darwin`; upload the `.dmg` as an artifact |
-| nightly | both | Benchmarks, full render snapshot set, release-configuration build |
+| nightly | macOS host mode | Benchmarks, full render snapshot set, release-configuration build |
 | release (tag `v*`) | macOS | Build, ad-hoc sign, create the updater bundle and signature, publish a Gitea release with `.dmg`, `.app.tar.gz`, `.sig` and `latest.json` |
+
+The runner is a LaunchAgent and does not read `~/.zshrc`: Rust and pnpm environment variables (e.g. `CARGO_TARGET_DIR` on an external disk) are set in the runner's `config.yaml` under `runner.envs` or in `~/.cargo/config.toml`. Scripts and workflows never assume the build output is in `./target`; they ask `cargo metadata` for `target_directory`.
 
 Secrets: the updater private key (`TAURI_SIGNING_PRIVATE_KEY` and its password) in Gitea Actions secrets.
 
@@ -599,7 +601,7 @@ Secrets: the updater private key (`TAURI_SIGNING_PRIVATE_KEY` and its password) 
 
 ### Later platforms
 
-Windows and Linux need: a Windows runner (or GitHub Actions after going public), WebView2 bootstrapper in the installer, fonts and file-association checks, and running the smoke checklist. The core crates are already tested on Linux from day one, which keeps this cheap.
+Windows and Linux need: a Windows runner (or GitHub Actions after going public), WebView2 bootstrapper in the installer, fonts and file-association checks, and running the smoke checklist. The core crates contain no macOS-specific code, so adding a Linux runner later keeps this cheap.
 
 ## 12. Risks, open questions and deferred items
 
